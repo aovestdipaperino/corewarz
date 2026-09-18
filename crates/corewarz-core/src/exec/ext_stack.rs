@@ -60,7 +60,11 @@ pub fn exec_ret(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult 
 
 /// Executes `PUSH val, sp`.
 ///
-/// Pushes the A-operand's resolved address and advances the stack pointer.
+/// Pushes the value in the B-field of the A-operand's cell and advances the
+/// stack pointer.
+///
+/// `PUSH` pushes a value, not an address: that is what makes it useful for
+/// saving data and symmetric with [`exec_pop`].
 pub fn exec_push(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult {
     let sp_cell = ops.b_ptr;
     let sp = load_sp(core, sp_cell);
