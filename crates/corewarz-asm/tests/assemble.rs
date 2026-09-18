@@ -336,3 +336,74 @@ fn warriors_longer_than_the_limit_are_rejected() {
     let err = assemble(&src, &cfg).unwrap_err();
     assert!(matches!(err.kind, AsmErrorKind::TooLong { .. }));
 }
+
+const ALL_OPCODES: [Opcode; 31] = [
+    Opcode::Dat,
+    Opcode::Mov,
+    Opcode::Add,
+    Opcode::Sub,
+    Opcode::Mul,
+    Opcode::Div,
+    Opcode::Mod,
+    Opcode::Jmp,
+    Opcode::Jmz,
+    Opcode::Jmn,
+    Opcode::Djn,
+    Opcode::Spl,
+    Opcode::Seq,
+    Opcode::Sne,
+    Opcode::Slt,
+    Opcode::Nop,
+    Opcode::And,
+    Opcode::Or,
+    Opcode::Xor,
+    Opcode::Shl,
+    Opcode::Shr,
+    Opcode::Not,
+    Opcode::Tst,
+    Opcode::Jez,
+    Opcode::Jnz,
+    Opcode::Jlz,
+    Opcode::Jgz,
+    Opcode::Call,
+    Opcode::Ret,
+    Opcode::Push,
+    Opcode::Pop,
+];
+
+const ALL_MODES: [AddrMode; 8] = [
+    AddrMode::Immediate,
+    AddrMode::Direct,
+    AddrMode::IndirectA,
+    AddrMode::IndirectB,
+    AddrMode::PredecA,
+    AddrMode::PredecB,
+    AddrMode::PostincA,
+    AddrMode::PostincB,
+];
+
+#[test]
+fn default_modifier_is_always_inside_the_opcodes_legal_set() {
+    // Regression for FIX 2: TST previously defaulted to `.I` (grouped with
+    // MOV/SEQ/SNE) while its legal set only contained [A, B, AB, BA, F, X].
+    // The assembler emitted TST.I, which the disassembler printed as text
+    // the assembler itself then rejected -- a broken round trip. This is
+    // the invariant the 9,984-case round-trip test could not catch, since
+    // that test enumerates `legal_modifiers` itself rather than checking it
+    // against `default_modifier`.
+    use corewarz_asm::{default_modifier, legal_modifiers};
+
+    for &opcode in &ALL_OPCODES {
+        let legal = legal_modifiers(opcode);
+        for &a_mode in &ALL_MODES {
+            for &b_mode in &ALL_MODES {
+                let d = default_modifier(opcode, a_mode, b_mode);
+                assert!(
+                    legal.is_empty() || legal.contains(&d),
+                    "{opcode:?} defaults to {d:?} for ({a_mode:?}, {b_mode:?}), \
+                     which is not in its legal set {legal:?}"
+                );
+            }
+        }
+    }
+}

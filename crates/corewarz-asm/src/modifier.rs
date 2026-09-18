@@ -43,7 +43,7 @@ pub fn default_modifier(opcode: Opcode, a_mode: AddrMode, b_mode: AddrMode) -> M
     let b_immediate = b_mode == AddrMode::Immediate;
     match opcode {
         Opcode::Dat => F,
-        Opcode::Mov | Opcode::Seq | Opcode::Sne | Opcode::Tst => {
+        Opcode::Mov | Opcode::Seq | Opcode::Sne => {
             if a_immediate {
                 AB
             } else if b_immediate {
@@ -62,7 +62,8 @@ pub fn default_modifier(opcode: Opcode, a_mode: AddrMode, b_mode: AddrMode) -> M
         | Opcode::Xor
         | Opcode::Shl
         | Opcode::Shr
-        | Opcode::Not => {
+        | Opcode::Not
+        | Opcode::Tst => {
             if a_immediate {
                 AB
             } else if b_immediate {
