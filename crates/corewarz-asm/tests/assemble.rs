@@ -173,6 +173,38 @@ fn unknown_opcodes_are_rejected_with_a_line_number() {
 }
 
 #[test]
+fn typod_opcode_with_no_label_names_the_opcode() {
+    let err = assemble("FROB $0, $0\n", &cfg()).unwrap_err();
+    assert_eq!(err.line, 1);
+    assert!(matches!(err.kind, AsmErrorKind::UnknownOpcode(ref s) if s == "FROB"));
+}
+
+#[test]
+fn typod_opcode_after_a_valid_label_names_the_opcode_not_the_label() {
+    let err = assemble("mylabel FROB $0,$0\n", &cfg()).unwrap_err();
+    assert_eq!(err.line, 1);
+    assert!(matches!(err.kind, AsmErrorKind::UnknownOpcode(ref s) if s == "FROB"));
+}
+
+#[test]
+fn org_with_bare_identifier_operand_is_not_mistaken_for_a_label() {
+    // `ORG go` has a single bare-identifier operand; that operand must not
+    // be parsed as a leading label naming a fictitious `ORG` instruction.
+    let w = assemble("ORG go\ngo MOV.I $0, $1\nEND\n", &cfg()).unwrap();
+    assert_eq!(w.start, 0);
+}
+
+#[test]
+fn jmp_with_bare_identifier_operand_is_not_mistaken_for_a_label() {
+    assert!(assemble("JMP start\nstart MOV.I $0, $1\nEND\n", &cfg()).is_ok());
+}
+
+#[test]
+fn digit_leading_operand_with_no_sigil_is_not_mistaken_for_a_label() {
+    assert!(assemble("MOV 0, 1\n", &cfg()).is_ok());
+}
+
+#[test]
 fn extended_opcodes_are_rejected_in_classic_mode() {
     let err = assemble("AND.F $0, $1", &cfg()).unwrap_err();
     assert!(matches!(

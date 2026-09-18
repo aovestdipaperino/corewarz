@@ -23,6 +23,16 @@ impl Line {
     }
 }
 
+/// Returns `true` when `token` looks like the start of an operand rather
+/// than a bare identifier: an addressing-mode sigil, a leading digit, or a
+/// leading `-` (a negative field, e.g. `$-1`).
+fn operand_like(token: &str) -> bool {
+    matches!(
+        token.chars().next(),
+        Some('#' | '$' | '*' | '@' | '{' | '<' | '}' | '>' | '-') | Some('0'..='9')
+    )
+}
+
 /// Splits `source` into [`Line`]s, stripping comments and blank lines.
 ///
 /// A leading token is treated as a label when the line has more than one
@@ -54,14 +64,10 @@ pub fn lex(
         // `head` is ambiguous when it matches a mnemonic (opcode or
         // pseudo-op) that also happens to be used as a label, e.g. a label
         // named `end` or `mov` on its own line, followed by a real
-        // instruction. Two independent checks resolve this; DO NOT collapse
-        // them into one, they cover different shapes of ambiguity:
+        // instruction. Two cases resolve this, and they are NOT
+        // interchangeable — each covers a different shape of ambiguity:
         //
-        // 1. When there IS a remainder, and that remainder's first token is
-        //    itself a mnemonic, `head` must be a label: pseudo-ops and
-        //    opcodes never nest, so two mnemonics on one line can only be
-        //    "label mnemonic ...".
-        // 2. When there is NO remainder (a single bare token on the line),
+        // 1. When there is NO remainder (a single bare token on the line),
         //    `head` can only be a standalone instruction if that mnemonic is
         //    legal with zero operands. Every opcode this assembler supports
         //    requires at least one operand except `DAT`/`NOP`/`RET` (whose
@@ -70,17 +76,31 @@ pub fn lex(
         //    alone on a line — e.g. `mov`, which requires an operand and
         //    cannot appear bare as an instruction — must be a label naming
         //    the following line, not an ill-formed instruction.
+        // 2. When there IS a remainder, neither "is `head` a mnemonic?" nor
+        //    "is `rest_first` a mnemonic?" alone can disambiguate: a typo'd
+        //    opcode (`FROB $0, $0`, `mylabel FROB $0,$0`) has an unrecognised
+        //    `head` in both the labelled and unlabelled case. Instead:
+        //      - If `head` IS a recognised mnemonic, `head` is a label only
+        //        when `rest_first` is *also* a mnemonic ("label MOV.I ...");
+        //        pseudo-ops and opcodes never nest, so two mnemonics on one
+        //        line can only be "label mnemonic ...".
+        //      - If `head` is NOT a recognised mnemonic, fall back to the
+        //        grammar instead of the dictionary: after a LABEL only a
+        //        mnemonic can follow, never an operand, while after a
+        //        MNEMONIC only operands can follow, never another bare
+        //        identifier. So `head` is treated as the (typo'd) mnemonic
+        //        iff `rest_first` is operand-shaped ("FROB $0, $0",
+        //        "mylabel FROB $0,$0" -> FROB is blamed either way); if
+        //        `rest_first` instead looks like a bare identifier ("ORG
+        //        go", "JMP start" would never reach this arm since ORG/JMP
+        //        are known; "step EQU 4") `head` is a label.
         let rest_first = rest.split_whitespace().next().unwrap_or("");
         let head_is_instruction = if rest_first.is_empty() {
             is_mnemonic(head) && allows_empty_operand(head)
-        } else {
-            // `head` is a label only when the next token is itself a
-            // recognised mnemonic ("label MOV.I ..."). Otherwise `head` is
-            // the intended mnemonic, even if it turns out to be unknown
-            // (e.g. a typo like "FROB $0, $0"): an unrecognised opcode
-            // should be reported by name, not misfiled as a label with the
-            // error pointing at its first operand.
+        } else if is_mnemonic(head) {
             !is_mnemonic(rest_first)
+        } else {
+            operand_like(rest_first)
         };
         let body = if head_is_instruction {
             text
