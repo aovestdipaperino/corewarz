@@ -54,7 +54,7 @@ struct RunArgs {
     #[arg(long)]
     extended: bool,
 
-    /// Number of rounds to fight.
+    /// Number of rounds to fight (`run` only; `watch` requires exactly 1).
     #[arg(long, default_value_t = 1)]
     rounds: u32,
 
@@ -98,12 +98,29 @@ fn load(path: &Path, config: &Config) -> Result<Warrior, String> {
     Ok(warrior)
 }
 
+/// Validates that an explicit `--positions` list, if given, names exactly
+/// one position per warrior. Shared by `run` and `watch` so neither can
+/// skip it and reach `Mars::try_new`'s length assertion with a bad count.
+fn validate_positions(positions: &Option<Vec<u32>>, warrior_count: usize) -> Result<(), String> {
+    if let Some(explicit) = positions {
+        if explicit.len() != warrior_count {
+            return Err(format!(
+                "got {} positions for {} warriors",
+                explicit.len(),
+                warrior_count
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn run(args: &RunArgs) -> Result<(), String> {
     let config = args.config();
     let mut warriors = Vec::with_capacity(args.warriors.len());
     for path in &args.warriors {
         warriors.push(load(path, &config)?);
     }
+    validate_positions(&args.positions, warriors.len())?;
 
     let mut wins = vec![0u32; warriors.len()];
     let mut ties = 0u32;
@@ -111,16 +128,7 @@ fn run(args: &RunArgs) -> Result<(), String> {
 
     for round in 0..args.rounds {
         let positions = match &args.positions {
-            Some(explicit) => {
-                if explicit.len() != warriors.len() {
-                    return Err(format!(
-                        "got {} positions for {} warriors",
-                        explicit.len(),
-                        warriors.len()
-                    ));
-                }
-                explicit.clone()
-            }
+            Some(explicit) => explicit.clone(),
             None => battle::random_positions(
                 &config,
                 warriors.len(),
@@ -143,11 +151,18 @@ fn run(args: &RunArgs) -> Result<(), String> {
 }
 
 fn watch(args: &RunArgs) -> Result<(), String> {
+    if args.rounds != 1 {
+        return Err(format!(
+            "watch plays a single battle and does not support --rounds (got {})",
+            args.rounds
+        ));
+    }
     let config = args.config();
     let mut warriors = Vec::with_capacity(args.warriors.len());
     for path in &args.warriors {
         warriors.push(load(path, &config)?);
     }
+    validate_positions(&args.positions, warriors.len())?;
     let positions = match &args.positions {
         Some(explicit) => explicit.clone(),
         None => battle::random_positions(&config, warriors.len(), args.seed),

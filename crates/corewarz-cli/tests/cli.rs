@@ -97,3 +97,59 @@ fn the_same_seed_gives_the_same_result() {
     };
     assert_eq!(run("7"), run("7"), "same seed must reproduce exactly");
 }
+
+#[test]
+fn watch_rejects_a_wrong_positions_count_cleanly() {
+    // Regression for FIX 4: `watch` used to skip the position-count check
+    // that `run` performs and pass a mismatched --positions straight to
+    // Mars::try_new, panicking on an internal assertion instead of
+    // reporting a clean error.
+    let out = corewarz()
+        .args([
+            "watch",
+            "warriors/imp.red",
+            "warriors/dwarf.red",
+            "--positions",
+            "0",
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR").to_string() + "/../..")
+        .output()
+        .expect("binary runs");
+    assert!(
+        !out.status.success(),
+        "a wrong position count must fail, not launch the TUI"
+    );
+    let text = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !text.to_lowercase().contains("panicked"),
+        "must be a clean error, not a panic: {text}"
+    );
+    assert!(
+        text.contains("positions") && text.contains("warriors"),
+        "message should explain the mismatch: {text}"
+    );
+}
+
+#[test]
+fn watch_rejects_rounds_other_than_one() {
+    let out = corewarz()
+        .args([
+            "watch",
+            "warriors/imp.red",
+            "warriors/dwarf.red",
+            "--rounds",
+            "5",
+        ])
+        .current_dir(env!("CARGO_MANIFEST_DIR").to_string() + "/../..")
+        .output()
+        .expect("binary runs");
+    assert!(
+        !out.status.success(),
+        "watch does not support playing multiple rounds"
+    );
+    let text = String::from_utf8_lossy(&out.stderr);
+    assert!(
+        !text.to_lowercase().contains("panicked"),
+        "must be a clean error, not a panic: {text}"
+    );
+}
