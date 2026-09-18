@@ -122,6 +122,14 @@ impl Mars {
         &self.core
     }
 
+    /// Mutable access to the core.
+    ///
+    /// Intended for tests and tooling that need to plant or corrupt cells; the
+    /// VM itself never needs it.
+    pub fn core_mut(&mut self) -> &mut Core {
+        &mut self.core
+    }
+
     /// The loaded warriors.
     #[must_use]
     pub fn warriors(&self) -> &[Warrior] {
