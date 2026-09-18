@@ -1,0 +1,11 @@
+[package]
+name = "corewarz-asm"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Redcode assembler and disassembler for CoreWarz"
+
+[dependencies]
+corewarz-core = { path = "../corewarz-core" }
