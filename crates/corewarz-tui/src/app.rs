@@ -18,6 +18,37 @@ use crate::state::VisualState;
 /// Cycles executed per second at each speed setting.
 const SPEEDS: [u32; 7] = [1, 5, 25, 100, 500, 2000, 10_000];
 
+/// RAII guard for terminal state restoration.
+///
+/// This guard ensures that the terminal is restored to its original state
+/// even if a panic occurs during rendering or event processing. Without this,
+/// a panic would unwind past the restoration code, leaving the terminal in raw
+/// mode and on the alternate screen, rendering the user's shell unusable.
+struct TerminalGuard;
+
+impl TerminalGuard {
+    /// Enables raw mode and enters the alternate screen.
+    ///
+    /// # Errors
+    /// Returns an error if either `enable_raw_mode()` or entering the alternate
+    /// screen fails.
+    fn new() -> io::Result<Self> {
+        enable_raw_mode()?;
+        io::stdout().execute(EnterAlternateScreen)?;
+        Ok(TerminalGuard)
+    }
+}
+
+impl Drop for TerminalGuard {
+    fn drop(&mut self) {
+        // Disable raw mode and leave the alternate screen. These calls should
+        // not panic, and if they fail, there is nothing useful we can do during
+        // unwinding, so we ignore errors.
+        let _ = disable_raw_mode();
+        let _ = io::stdout().execute(LeaveAlternateScreen);
+    }
+}
+
 /// A running visualizer.
 pub struct App {
     mars: Mars,
@@ -45,20 +76,14 @@ impl App {
     ///
     /// # Errors
     /// Returns any terminal I/O error. The terminal is always restored, even
-    /// on error.
+    /// on error or panic.
     pub fn run(&mut self) -> io::Result<()> {
-        enable_raw_mode()?;
-        io::stdout().execute(EnterAlternateScreen)?;
+        let _guard = TerminalGuard::new()?;
         let terminal_result = Terminal::new(CrosstermBackend::new(io::stdout()));
-        let result = match terminal_result {
+        match terminal_result {
             Ok(mut terminal) => self.event_loop(&mut terminal),
             Err(e) => Err(e),
-        };
-        // The terminal must be restored on every path, including an error
-        // creating it or an error during the event loop.
-        let disable_result = disable_raw_mode();
-        let leave_result = io::stdout().execute(LeaveAlternateScreen).map(|_| ());
-        result.and(disable_result).and(leave_result)
+        }
     }
 
     fn event_loop<B: ratatui::backend::Backend>(
