@@ -1,0 +1,10 @@
+[workspace]
+resolver = "2"
+members = ["crates/corewarz-core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Enzo Lombardi <enzinol@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/aovestdipaperino/corewarz"
