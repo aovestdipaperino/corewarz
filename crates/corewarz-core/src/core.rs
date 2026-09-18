@@ -13,6 +13,7 @@ pub struct Core {
     cells: Vec<Instruction>,
     owners: Vec<Option<WarriorId>>,
     size: u32,
+    writes: Vec<(u32, WarriorId)>,
 }
 
 impl Core {
@@ -25,6 +26,7 @@ impl Core {
             cells: vec![Instruction::DAT_ZERO; n],
             owners: vec![None; n],
             size: config.core_size,
+            writes: Vec::new(),
         }
     }
 
@@ -58,6 +60,7 @@ impl Core {
     pub fn set(&mut self, addr: u32, instr: Instruction, warrior: WarriorId) {
         self.cells[addr as usize] = instr;
         self.owners[addr as usize] = Some(warrior);
+        self.writes.push((addr, warrior));
     }
 
     /// The warrior that last wrote `addr`, if any.
@@ -67,6 +70,14 @@ impl Core {
     #[must_use]
     pub fn owner(&self, addr: u32) -> Option<WarriorId> {
         self.owners[addr as usize]
+    }
+
+    /// Addresses written since [`Core::take_writes`] was last called.
+    ///
+    /// The VM drains this once per executed instruction to notify observers,
+    /// which keeps `Core` free of any observer dependency.
+    pub fn take_writes(&mut self) -> Vec<(u32, WarriorId)> {
+        std::mem::take(&mut self.writes)
     }
 }
 
