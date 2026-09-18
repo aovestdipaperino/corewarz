@@ -8,3 +8,6 @@ repository.workspace = true
 description = "MARS virtual machine for CoreWarz, an extended Core War"
 
 [dependencies]
+
+[dev-dependencies]
+corewarz-asm = { path = "../corewarz-asm" }
