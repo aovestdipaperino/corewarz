@@ -5,8 +5,60 @@ here must be legal classic Redcode — no CoreWarz extensions — because the wh
 point is that both simulators can run them.
 
 Warriors are published, well-known designs covering the main strategy families:
-an imp, a dwarf-style bomber, a scanner, a replicator, and a vampire. Each
-exercises different corners of the instruction set and the addressing modes.
+an imp, a dwarf-style bomber, a scanner, a replicator, a vampire, plus two
+warriors added specifically to close opcode-coverage gaps (`creeper.red`,
+`prober.red` — see below).
+
+## Opcode / addressing-mode coverage audit
+
+A mutation test proved this matters: inverting `exec_jmz` (making JMZ jump on
+non-zero) was **not** caught by the original five-warrior corpus, because none
+of imp/dwarf/replicator/scanner/vampire execute JMZ or JMN at all. `creeper.red`
+and `prober.red` were added to close that gap and the rest of the classic
+opcode set. Audit performed by grepping `tests/corpus/*.red` for each classic
+ICWS'94 opcode and addressing mode.
+
+| Opcode | Covered by |
+|---|---|
+| DAT | dwarf, scanner, vampire, creeper, prober |
+| MOV | imp, dwarf, replicator, scanner, vampire, creeper, prober |
+| ADD | dwarf, scanner, vampire, creeper, prober |
+| SUB | scanner, creeper |
+| MUL | prober |
+| DIV | prober |
+| MOD | prober |
+| JMP | dwarf, replicator, scanner, vampire, creeper, prober |
+| JMZ | creeper |
+| JMN | prober |
+| DJN | vampire |
+| SPL | replicator, vampire, creeper |
+| SEQ | scanner |
+| SNE | prober |
+| SLT | prober |
+| NOP | prober |
+
+| Addressing mode | Covered by |
+|---|---|
+| `#` immediate | dwarf, scanner, vampire, creeper, prober |
+| `$` direct | all eight warriors |
+| `*` indirect-A | scanner |
+| `@` indirect-B | dwarf, scanner, vampire |
+| `{` predec-A | prober |
+| `<` predec-B | prober |
+| `}` postinc-A | prober |
+| `>` postinc-B | creeper |
+
+All sixteen classic opcodes and all eight addressing modes are now exercised
+by at least one corpus warrior. `creeper.red` is a JMZ-controlled bomber that
+counts a loop counter down with SUB and walks core forward with a
+postincrementing (`>`) pointer. `prober.red` is a JMN-based scanner (the
+mirror image of `scanner.red`'s SEQ-based test) that also does MUL/DIV/MOD
+arithmetic housekeeping, SLT/SNE comparisons, an executed NOP, and bombs core
+through three separate pointers exercising `{`, `<`, and `}`. Both were
+verified to assemble under `Dialect::Classic`, to be accepted by pMARS, and to
+survive long enough to fight real, non-trivial battles against every other
+corpus warrior (see the differential test's `compared N battles` output for
+the full matrix now run at `cargo test -p corewarz-core --test differential`).
 
 ## pMARS build used
 
