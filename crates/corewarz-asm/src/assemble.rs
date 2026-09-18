@@ -20,12 +20,19 @@ fn is_pseudo(text: &str) -> bool {
 pub fn assemble(source: &str, config: &Config) -> Result<Warrior, AsmError> {
     let is_mnemonic =
         |t: &str| parse_opcode(t.split('.').next().unwrap_or(t)).is_some() || is_pseudo(t);
-    let lines = lex(source, &is_mnemonic);
+    let allows_empty_operand = |t: &str| {
+        t.eq_ignore_ascii_case("END")
+            || matches!(
+                parse_opcode(t),
+                Some(Opcode::Dat | Opcode::Nop | Opcode::Ret)
+            )
+    };
+    let lines = lex(source, &is_mnemonic, &allows_empty_operand);
 
     // --- pass one: labels, EQUs, ORG ---
     let mut labels: HashMap<String, i64> = HashMap::new();
     let mut equs: HashMap<String, String> = HashMap::new();
-    let mut org: Option<String> = None;
+    let mut org: Option<(String, usize)> = None;
     let mut offset: i64 = 0;
     for line in &lines {
         let mnemonic = line.mnemonic.as_deref().unwrap_or("").to_ascii_uppercase();
@@ -43,7 +50,7 @@ pub fn assemble(source: &str, config: &Config) -> Result<Warrior, AsmError> {
             }
             "ORG" | "END" => {
                 if let Some(target) = line.operands.first() {
-                    org = Some(target.clone());
+                    org = Some((target.clone(), line.number));
                 }
             }
             "" => {
@@ -89,9 +96,11 @@ pub fn assemble(source: &str, config: &Config) -> Result<Warrior, AsmError> {
     }
 
     let start = match org {
-        Some(target) => {
-            let resolved = resolve_expr(&target, 0, &labels, &equs)
-                .map_err(|kind| AsmError { line: 1, kind })?;
+        Some((target, org_line)) => {
+            let resolved = resolve_expr(&target, 0, &labels, &equs).map_err(|kind| AsmError {
+                line: org_line,
+                kind,
+            })?;
             u32::try_from(resolved.rem_euclid(i64::from(config.core_size))).unwrap_or(0)
         }
         None => 0,

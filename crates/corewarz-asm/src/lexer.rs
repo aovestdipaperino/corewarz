@@ -27,9 +27,16 @@ impl Line {
 ///
 /// A leading token is treated as a label when the line has more than one
 /// token and the first token is not a known mnemonic; the caller resolves
-/// that ambiguity by consulting `parse_opcode`.
+/// that ambiguity by consulting `parse_opcode`. `allows_empty_operand`
+/// reports whether a mnemonic is legal with no operand at all (`END`, and
+/// the opcodes `DAT`/`NOP`/`RET`, whose emitter defaults a missing operand
+/// to direct zero); it is consulted only for a bare single-token line.
 #[must_use]
-pub fn lex(source: &str, is_mnemonic: &dyn Fn(&str) -> bool) -> Vec<Line> {
+pub fn lex(
+    source: &str,
+    is_mnemonic: &dyn Fn(&str) -> bool,
+    allows_empty_operand: &dyn Fn(&str) -> bool,
+) -> Vec<Line> {
     let mut out = Vec::new();
     for (index, raw) in source.lines().enumerate() {
         let text = raw.split(';').next().unwrap_or("").trim();
@@ -44,14 +51,31 @@ pub fn lex(source: &str, is_mnemonic: &dyn Fn(&str) -> bool) -> Vec<Line> {
             number: index + 1,
             ..Line::default()
         };
-        // `head` is ambiguous when it matches a pseudo-op keyword (`END`,
-        // `ORG`) that also happens to be used as a label: e.g. a label named
-        // `end` followed by a real instruction. Resolve the ambiguity by
-        // checking whether the next token is itself a mnemonic; if it is,
-        // `head` must be a label, since pseudo-ops and opcodes never nest.
+        // `head` is ambiguous when it matches a mnemonic (opcode or
+        // pseudo-op) that also happens to be used as a label, e.g. a label
+        // named `end` or `mov` on its own line, followed by a real
+        // instruction. Two independent checks resolve this; DO NOT collapse
+        // them into one, they cover different shapes of ambiguity:
+        //
+        // 1. When there IS a remainder, and that remainder's first token is
+        //    itself a mnemonic, `head` must be a label: pseudo-ops and
+        //    opcodes never nest, so two mnemonics on one line can only be
+        //    "label mnemonic ...".
+        // 2. When there is NO remainder (a single bare token on the line),
+        //    `head` can only be a standalone instruction if that mnemonic is
+        //    legal with zero operands. Every opcode this assembler supports
+        //    requires at least one operand except `DAT`/`NOP`/`RET` (whose
+        //    emitter defaults the missing operand to direct zero), and the
+        //    only operand-less pseudo-op is `END`. Anything else standing
+        //    alone on a line — e.g. `mov`, which requires an operand and
+        //    cannot appear bare as an instruction — must be a label naming
+        //    the following line, not an ill-formed instruction.
         let rest_first = rest.split_whitespace().next().unwrap_or("");
-        let head_is_instruction =
-            is_mnemonic(head) && !(!rest_first.is_empty() && is_mnemonic(rest_first));
+        let head_is_instruction = if rest_first.is_empty() {
+            is_mnemonic(head) && allows_empty_operand(head)
+        } else {
+            is_mnemonic(head) && !is_mnemonic(rest_first)
+        };
         let body = if head_is_instruction {
             text
         } else {

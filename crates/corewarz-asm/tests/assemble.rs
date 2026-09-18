@@ -206,6 +206,90 @@ fn duplicate_labels_are_rejected() {
 }
 
 #[test]
+fn a_label_named_after_an_opcode_resolves_correctly() {
+    // `mov` alone on its own line is a label, not an ill-formed instruction:
+    // MOV always requires an operand, so a bare `mov` cannot itself be one.
+    let w = assemble("mov\nMOV.I $0,$1\n", &cfg()).unwrap();
+    assert_eq!(w.code.len(), 1);
+}
+
+#[test]
+fn a_label_named_end_resolves_correctly() {
+    // Unlike `mov`, a bare `end` is not resolvable as a label: `END` is
+    // legal with zero operands, so a lone `end` line is the pseudo-op
+    // itself, per the existing (and preserved) "END alone" behaviour. The
+    // label form only works when paired with an instruction on the same
+    // line, exactly like the `mov`/`DAT` case below.
+    let src = "end DAT $0,$0\nJMP $end, $0\n";
+    let w = assemble(src, &cfg()).unwrap();
+    assert_eq!(w.code.len(), 2);
+    assert_eq!(w.code[1].a, 7999, "JMP back one cell is -1, folded");
+}
+
+#[test]
+fn label_sharing_an_opcode_name_with_an_instruction_on_the_same_line() {
+    let w = assemble("mov DAT $0,$0\n", &cfg()).unwrap();
+    assert_eq!(w.code.len(), 1);
+    assert_eq!(w.code[0].opcode, Opcode::Dat);
+}
+
+#[test]
+fn end_alone_with_no_operand_sets_no_start_offset() {
+    let w = assemble("DAT $0, $0\nEND\n", &cfg()).unwrap();
+    assert_eq!(w.start, 0);
+    assert_eq!(w.code.len(), 1, "END is not an instruction");
+}
+
+#[test]
+fn org_with_an_operand_is_a_pseudo_op() {
+    let src = "ORG go\n     DAT $0, $0\ngo   MOV.I $0, $1\n";
+    let w = assemble(src, &cfg()).unwrap();
+    assert_eq!(w.start, 1);
+}
+
+#[test]
+fn equ_definition_named_like_a_label() {
+    let src = "step EQU 4\nMOV.I $0, $step\n";
+    let w = assemble(src, &cfg()).unwrap();
+    assert_eq!(w.code[0].b, 4);
+}
+
+#[test]
+fn a_non_colliding_standalone_label_still_parses() {
+    let src = "loop\nMOV.I $0,$1\nJMP $loop, $0\n";
+    let w = assemble(src, &cfg()).unwrap();
+    assert_eq!(w.code.len(), 2);
+}
+
+#[test]
+fn an_ordinary_instruction_line_with_no_label_still_parses() {
+    let w = assemble("MOV.I $0, $1\n", &cfg()).unwrap();
+    assert_eq!(w.code.len(), 1);
+}
+
+#[test]
+fn org_unresolved_target_reports_the_org_line_not_line_one() {
+    let err = assemble("MOV.I $0,$1\nMOV.I $0,$1\nORG nowhere\n", &cfg()).unwrap_err();
+    assert_eq!(err.line, 3);
+    assert!(matches!(err.kind, AsmErrorKind::UnresolvedLabel(_)));
+}
+
+#[test]
+fn end_unresolved_target_reports_the_end_line_not_line_one() {
+    let err = assemble("MOV.I $0,$1\nMOV.I $0,$1\nEND nowhere\n", &cfg()).unwrap_err();
+    assert_eq!(err.line, 3);
+    assert!(matches!(err.kind, AsmErrorKind::UnresolvedLabel(_)));
+}
+
+#[test]
+fn a_malformed_modifier_suffix_is_rejected() {
+    let err = assemble("MOV.Z $0, $1", &cfg()).unwrap_err();
+    // `Z` is not a recognised modifier letter, so parse_modifier fails and
+    // the line is rejected as a malformed operand (the modifier text).
+    assert!(matches!(err.kind, AsmErrorKind::MalformedOperand(ref s) if s == "Z"));
+}
+
+#[test]
 fn warriors_longer_than_the_limit_are_rejected() {
     let cfg = Config {
         max_length: 3,
