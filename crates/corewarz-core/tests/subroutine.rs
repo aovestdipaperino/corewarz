@@ -96,3 +96,33 @@ fn bombing_the_stack_pointer_hijacks_the_return() {
         "the return went where the attacker chose"
     );
 }
+
+#[test]
+fn a_warrior_with_an_out_of_range_stack_pointer_field_does_not_panic() {
+    // Regression for FIX 3: `CALL $5, $1` with a stack-pointer cell whose
+    // B-field holds 99_999 (from `DAT $0, $99999`, well past the 8000-cell
+    // default core) is admitted by `Mars::try_new` -- admission checks
+    // warrior length and dialect, not runtime cell contents -- and must
+    // execute without panicking. It may do something useless; it must not
+    // index out of bounds.
+    let code = vec![
+        i(Opcode::Call, AddrMode::Direct, 5, AddrMode::Direct, 1),
+        Instruction {
+            b: 99_999,
+            ..Instruction::DAT_ZERO
+        },
+    ];
+    let warrior = Warrior {
+        name: "bad-sp".into(),
+        code,
+        start: 0,
+    };
+    let config = Config {
+        dialect: Dialect::Extended,
+        ..Config::default()
+    };
+    let mut mars = Mars::try_new(config, vec![warrior], &[0])
+        .expect("warrior is admitted despite the bad field");
+
+    mars.step(&mut NullObserver); // must not panic
+}

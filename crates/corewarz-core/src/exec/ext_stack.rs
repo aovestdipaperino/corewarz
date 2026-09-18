@@ -38,7 +38,7 @@ fn store_b(core: &mut Core, addr: u32, value: u32, owner: WarriorId) {
 /// the A-operand.
 pub fn exec_call(core: &mut Core, pc: u32, ops: Operands, owner: WarriorId) -> StepResult {
     let sp_cell = ops.b_ptr;
-    let sp = load_sp(core, sp_cell);
+    let sp = core.fold(i64::from(load_sp(core, sp_cell)));
     let return_address = core.fold(i64::from(pc) + 1);
     store_b(core, sp, return_address, owner);
     store_sp(core, sp_cell, core.fold(i64::from(sp) + 1), owner);
@@ -67,7 +67,7 @@ pub fn exec_ret(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult 
 /// saving data and symmetric with [`exec_pop`].
 pub fn exec_push(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult {
     let sp_cell = ops.b_ptr;
-    let sp = load_sp(core, sp_cell);
+    let sp = core.fold(i64::from(load_sp(core, sp_cell)));
     store_b(core, sp, ops.ira.b, owner);
     store_sp(core, sp_cell, core.fold(i64::from(sp) + 1), owner);
     StepResult::Continue
@@ -276,6 +276,58 @@ mod tests {
     fn the_stack_pointer_wraps() {
         let (core, _) = run(Opcode::Call, 300, SP_CELL, 7999);
         assert_eq!(core.get(SP_CELL).b, 0, "advancing past the end wraps");
+    }
+
+    #[test]
+    fn call_folds_an_out_of_range_stack_pointer_instead_of_panicking() {
+        // Regression for FIX 3: a warrior containing `CALL $5, $1` with a
+        // stack-pointer cell whose B-field holds a value beyond core size
+        // (e.g. from `DAT $0, $99999`) is admitted by `Mars::try_new`
+        // (admission checks warrior length, not runtime cell contents), so
+        // the VM must fold that value instead of using it as a raw index.
+        // It may land anywhere; it must not panic.
+        let (core, r) = run(Opcode::Call, 300, SP_CELL, 99_999);
+        assert!(matches!(r, StepResult::Jump(300)), "no panic, just a jump");
+        // 99_999 folded into an 8000-cell core is 99_999 % 8000 = 3999.
+        assert_eq!(
+            core.get(3999).b,
+            1,
+            "return address landed at the folded cell"
+        );
+    }
+
+    #[test]
+    fn push_folds_an_out_of_range_stack_pointer_instead_of_panicking() {
+        let mut core = Core::new(&Config::default());
+        let w = WarriorId(0);
+        core.set(
+            SP_CELL,
+            Instruction {
+                b: 99_999,
+                ..Instruction::DAT_ZERO
+            },
+            w,
+        );
+        core.set(
+            20,
+            Instruction {
+                b: 1234,
+                ..Instruction::DAT_ZERO
+            },
+            w,
+        );
+        let push = Instruction {
+            opcode: Opcode::Push,
+            modifier: Modifier::F,
+            a_mode: AddrMode::Direct,
+            a: 20,
+            b_mode: AddrMode::Direct,
+            b: SP_CELL,
+        };
+        core.set(0, push, w);
+        let ops = resolve(&mut core, 0, push, w);
+        assert_eq!(exec_push(&mut core, ops, w), StepResult::Continue);
+        assert_eq!(core.get(3999).b, 1234, "value landed at the folded cell");
     }
 
     #[test]
