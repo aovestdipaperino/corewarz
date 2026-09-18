@@ -10,4 +10,5 @@ description = "MARS virtual machine for CoreWarz, an extended Core War"
 [dependencies]
 
 [dev-dependencies]
+proptest = "1"
 corewarz-asm = { path = "../corewarz-asm" }
