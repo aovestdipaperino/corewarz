@@ -62,6 +62,11 @@ cell. Only the arithmetic differs, per selected field pair:
 The result of any of these opcodes is folded back into the core size exactly
 like `ADD`'s result is (e.g. a left shift that overflows the core size wraps).
 
+`NOT` complements a full 32-bit word *before* folding, not the core size.
+On the default 8000-cell core this means `NOT x` behaves as `7295 - x`
+(`2^32 - 1` folded into 8000 cells is 7295), not `7999 - x`: `NOT.B` of 7
+gives 7288, and `NOT 0` gives 7295.
+
 As with `ADD`, the default modifier (when none is written) is `.AB` if the
 A-operand is immediate, `.B` if only the B-operand is immediate, otherwise
 `.F`. Writing a modifier explicitly is recommended for clarity, and is
@@ -102,6 +107,14 @@ field(s) of the B-operand's cell:
 This is the value-producing comparison the dialect needs, since classic
 Redcode can only skip on a comparison (`SEQ`/`SNE`). `TST` followed by one of
 the conditional branches below expresses any comparison-branch.
+
+`TST` compares the fields as **unsigned** values, like classic `SLT`, not as
+the folded signed values `JLZ`/`JGZ` read. So `TST` of 7999 against 1 yields
+`1` ("source greater"), even though `JLZ` reads 7999 as negative (`-1`). This
+matters because `TST` then `JLZ`/`JGZ` is the documented idiom in section 4.3:
+the sign `JLZ` sees on the *result* cell is meaningful (`TST` writes `0`, `1`,
+or `CORESIZE - 1`, and only the last of those reads as negative), but the
+comparison `TST` performs on its *operands* is unsigned throughout.
 
 **Example** (`docs/snippets/tst.red`): compare immediate 3 against a cell
 whose B-field is 9. Since 3 < 9, the destination's B-field becomes

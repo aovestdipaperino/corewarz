@@ -28,7 +28,7 @@ cargo run -p corewarz-cli -- watch warriors/imp.red warriors/dwarf.red
 
 This opens the live terminal visualizer with the classic sample warriors
 `imp` and `dwarf` fighting in an 8000-cell core. Controls: `space`
-pause/resume, `s` single-step, `+`/`-` speed, `g` run to a cycle, `q` quit.
+pause/resume, `s` single-step, `+`/`-` speed, `q` or `Esc` quit.
 
 To run a battle headlessly and just see the result:
 

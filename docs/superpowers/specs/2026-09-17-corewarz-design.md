@@ -53,7 +53,7 @@ corewarz/
 ├── crates/
 │   ├── corewarz-core       # instruction representation + MARS VM
 │   ├── corewarz-asm        # assembler / disassembler  (depends: core)
-│   ├── corewarz-tui        # visualizer & debugger     (depends: core)
+│   ├── corewarz-tui        # visualizer & debugger     (depends: core, asm)
 │   └── corewarz-cli        # `corewarz` binary         (depends: core, asm, tui)
 └── docs/
 ```
@@ -69,7 +69,10 @@ Knows nothing about text, files, or terminals. Public surface:
 - accessors for core contents, ownership map, process counts, cycle count
 - the `Observer` trait (Section 5)
 
-Testable, fuzzable, and benchmarkable with zero I/O.
+Testable, fuzzable, and benchmarkable with zero I/O. It also carries a
+dev-dependency on `corewarz-asm`, used only by its differential test harness
+to assemble corpus warriors for comparison against pMARS; this never appears
+in the production dependency graph.
 
 ### corewarz-asm
 
@@ -81,8 +84,9 @@ the extended opcodes, and rejection of ill-formed opcode/modifier pairs. Depends
 ### corewarz-tui
 
 Renders and drives a `Mars` via the `Observer` trait. Built on `ratatui` +
-`crossterm`. Depends on core only. Cannot corrupt a battle: it holds a `Mars`,
-calls `step()`, and reads public state.
+`crossterm`. Depends on `corewarz-core` for the `Mars` it drives and on
+`corewarz-asm` to disassemble cells for display. Cannot corrupt a battle: it
+holds a `Mars`, calls `step()`, and reads public state.
 
 ### corewarz-cli
 
@@ -234,7 +238,6 @@ All are settable via `Config` and CLI flags.
 
 ```rust
 pub trait Observer {
-    fn on_read(&mut self, addr: usize) {}
     fn on_write(&mut self, addr: usize, warrior: WarriorId) {}
     fn on_exec(&mut self, addr: usize, warrior: WarriorId) {}
     fn on_death(&mut self, warrior: WarriorId, addr: usize) {}
@@ -272,8 +275,8 @@ the fastest check on the Section 4 semantics.
 **Status pane**: cycle count, per-warrior process counts, last instruction executed
 per warrior.
 
-**Controls**: `space` pause/resume, `s` single-step, `+`/`-` speed, `g` run to
-cycle, `q` quit.
+**Controls**: `space` pause/resume, `s` single-step, `+`/`-` speed, `q` or
+`Esc` quit.
 
 ## 8. Error handling and testing
 

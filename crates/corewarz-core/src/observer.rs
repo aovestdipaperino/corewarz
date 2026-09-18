@@ -11,11 +11,6 @@ use crate::warrior::WarriorId;
 /// Every method has a default no-op implementation, so an implementor need
 /// only override what it cares about.
 pub trait Observer {
-    /// A cell was read during operand resolution or execution.
-    fn on_read(&mut self, addr: u32) {
-        let _ = addr;
-    }
-
     /// A cell was written by `warrior`.
     fn on_write(&mut self, addr: u32, warrior: WarriorId) {
         let _ = (addr, warrior);

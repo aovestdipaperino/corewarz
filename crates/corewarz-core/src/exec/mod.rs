@@ -325,7 +325,7 @@ mod dispatch_wiring_tests {
     }
 
     #[test]
-    fn push_writes_an_address_and_advances_through_dispatch() {
+    fn push_writes_a_value_and_advances_through_dispatch() {
         let mut core = Core::new(&Config::default());
         let w = WarriorId(0);
         let instr = Instruction {

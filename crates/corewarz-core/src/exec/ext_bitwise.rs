@@ -163,6 +163,16 @@ mod tests {
     }
 
     #[test]
+    fn not_complements_a_32_bit_word_not_the_core_size() {
+        // NOT complements a full 32-bit word before folding, so on the
+        // default 8000-cell core `NOT x` behaves as `7295 - x`, not
+        // `7999 - x`: !7u32 folded into 8000 cells is 7288, matching
+        // `7295 - 7`. This pins that behaviour so it cannot drift silently
+        // (see docs/extended-redcode.md).
+        assert_eq!(run(Modifier::B, BitOp::Not, (0, 0), (0, 7)).b, 7288);
+    }
+
+    #[test]
     fn modifiers_select_fields_exactly_as_add_does() {
         let r = run(Modifier::F, BitOp::Or, (0b0001, 0b0010), (0b0100, 0b1000));
         assert_eq!((r.a, r.b), (0b0101, 0b1010));

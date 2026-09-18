@@ -21,6 +21,11 @@ impl Core {
     /// and unowned.
     #[must_use]
     pub fn new(config: &Config) -> Self {
+        debug_assert!(
+            config.core_size >= 4,
+            "below a core size of 4, folded signed reading degenerates: \
+             negative_one() stops satisfying is_negative()"
+        );
         let n = config.core_size as usize;
         Self {
             cells: vec![Instruction::DAT_ZERO; n],
@@ -47,7 +52,7 @@ impl Core {
     /// Reads the instruction at `addr`.
     ///
     /// # Panics
-    /// Panics if `addr` is not a folded address. Callers must fold first.
+    /// Panics if `addr >= self.size()`. Callers must fold first.
     #[must_use]
     pub fn get(&self, addr: u32) -> Instruction {
         self.cells[addr as usize]
@@ -56,7 +61,7 @@ impl Core {
     /// Writes `instr` at `addr` and records `warrior` as the cell's owner.
     ///
     /// # Panics
-    /// Panics if `addr` is not a folded address. Callers must fold first.
+    /// Panics if `addr >= self.size()`. Callers must fold first.
     pub fn set(&mut self, addr: u32, instr: Instruction, warrior: WarriorId) {
         self.cells[addr as usize] = instr;
         self.owners[addr as usize] = Some(warrior);
