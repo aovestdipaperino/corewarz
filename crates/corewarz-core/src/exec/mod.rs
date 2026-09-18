@@ -3,6 +3,7 @@
 pub mod classic_data;
 pub mod classic_flow;
 pub mod ext_bitwise;
+pub mod ext_compare;
 pub mod fields;
 pub mod operand;
 
@@ -14,6 +15,7 @@ use classic_flow::{
     exec_dat, exec_djn, exec_jmn, exec_jmp, exec_jmz, exec_nop, exec_skip_cmp, exec_spl, SkipCmp,
 };
 use ext_bitwise::{exec_bitop, BitOp};
+use ext_compare::exec_tst;
 use operand::{resolve, Operands};
 
 /// Resolves operands and executes one instruction.
@@ -47,6 +49,7 @@ pub fn dispatch(core: &mut Core, pc: u32, owner: WarriorId) -> StepResult {
         Opcode::Shl => exec_bitop(core, instr, ops, owner, BitOp::Shl),
         Opcode::Shr => exec_bitop(core, instr, ops, owner, BitOp::Shr),
         Opcode::Not => exec_bitop(core, instr, ops, owner, BitOp::Not),
+        Opcode::Tst => exec_tst(core, instr, ops, owner),
         other => unimplemented!("extended opcode {other:?} arrives in a later task"),
     }
 }

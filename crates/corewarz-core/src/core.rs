@@ -79,6 +79,25 @@ impl Core {
     pub fn take_writes(&mut self) -> Vec<(u32, WarriorId)> {
         std::mem::take(&mut self.writes)
     }
+
+    /// The core's representation of −1.
+    #[must_use]
+    pub const fn negative_one(&self) -> u32 {
+        self.size - 1
+    }
+
+    /// Returns `true` if `value` reads as negative under the conventional
+    /// signed interpretation: strictly greater than half the core size.
+    #[must_use]
+    pub const fn is_negative(&self, value: u32) -> bool {
+        value > self.size / 2
+    }
+
+    /// Returns `true` if `value` reads as positive: non-zero and not negative.
+    #[must_use]
+    pub const fn is_positive(&self, value: u32) -> bool {
+        value != 0 && value <= self.size / 2
+    }
 }
 
 #[cfg(test)]
@@ -126,5 +145,19 @@ mod tests {
         assert_eq!(c.get(10).a, 42);
         assert_eq!(c.owner(10), Some(WarriorId(1)));
         assert_eq!(c.owner(11), None);
+    }
+
+    #[test]
+    fn the_signed_reading_splits_the_core_in_half() {
+        let c = core();
+        assert_eq!(c.negative_one(), 7999);
+        assert!(c.is_negative(7999));
+        assert!(c.is_negative(4001));
+        assert!(!c.is_negative(4000), "exactly half is not negative");
+        assert!(!c.is_negative(0));
+        assert!(c.is_positive(1));
+        assert!(c.is_positive(4000));
+        assert!(!c.is_positive(0), "zero is neither positive nor negative");
+        assert!(!c.is_positive(4001));
     }
 }
