@@ -36,38 +36,59 @@ pub const fn exec_jmp(ops: Operands) -> StepResult {
     StepResult::Jump(ops.a_ptr)
 }
 
-/// The B-operand field values this modifier examines for a conditional jump.
-fn tested_fields(modifier: Modifier, irb: &Instruction) -> Vec<u32> {
-    match modifier {
-        Modifier::A | Modifier::BA => vec![irb.a],
-        Modifier::B | Modifier::AB => vec![irb.b],
-        Modifier::F | Modifier::X | Modifier::I => vec![irb.a, irb.b],
-    }
-}
-
 /// Executes `JMZ`: jumps when every examined field is zero.
 #[must_use]
 pub fn exec_jmz(instr: Instruction, ops: Operands) -> StepResult {
-    if tested_fields(instr.modifier, &ops.irb)
-        .iter()
-        .all(|v| *v == 0)
-    {
-        StepResult::Jump(ops.a_ptr)
-    } else {
-        StepResult::Continue
+    match instr.modifier {
+        Modifier::A | Modifier::BA => {
+            if ops.irb.a == 0 {
+                StepResult::Jump(ops.a_ptr)
+            } else {
+                StepResult::Continue
+            }
+        }
+        Modifier::B | Modifier::AB => {
+            if ops.irb.b == 0 {
+                StepResult::Jump(ops.a_ptr)
+            } else {
+                StepResult::Continue
+            }
+        }
+        Modifier::F | Modifier::X | Modifier::I => {
+            if ops.irb.a == 0 && ops.irb.b == 0 {
+                StepResult::Jump(ops.a_ptr)
+            } else {
+                StepResult::Continue
+            }
+        }
     }
 }
 
 /// Executes `JMN`: jumps when any examined field is non-zero.
 #[must_use]
 pub fn exec_jmn(instr: Instruction, ops: Operands) -> StepResult {
-    if tested_fields(instr.modifier, &ops.irb)
-        .iter()
-        .any(|v| *v != 0)
-    {
-        StepResult::Jump(ops.a_ptr)
-    } else {
-        StepResult::Continue
+    match instr.modifier {
+        Modifier::A | Modifier::BA => {
+            if ops.irb.a != 0 {
+                StepResult::Jump(ops.a_ptr)
+            } else {
+                StepResult::Continue
+            }
+        }
+        Modifier::B | Modifier::AB => {
+            if ops.irb.b != 0 {
+                StepResult::Jump(ops.a_ptr)
+            } else {
+                StepResult::Continue
+            }
+        }
+        Modifier::F | Modifier::X | Modifier::I => {
+            if ops.irb.a != 0 || ops.irb.b != 0 {
+                StepResult::Jump(ops.a_ptr)
+            } else {
+                StepResult::Continue
+            }
+        }
     }
 }
 
