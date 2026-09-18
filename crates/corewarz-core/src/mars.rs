@@ -377,4 +377,47 @@ mod tests {
             "separation wraps"
         );
     }
+
+    #[test]
+    fn spl_enqueues_the_continuation_before_the_split_target() {
+        let code = vec![
+            i(Opcode::Spl, 5, 0), // pc=0: SPL with A=5, targets pc=5
+            i(Opcode::Dat, 0, 0), // pc=1: DAT (continuation dies)
+            i(Opcode::Mov, 0, 0), // pc=2-4: filler
+            i(Opcode::Mov, 0, 0),
+            i(Opcode::Mov, 0, 0),
+            i(Opcode::Jmp, 0, 0), // pc=5: JMP (split target)
+        ];
+        let mut mars = Mars::new(Config::default(), vec![warrior("splitter", code)], &[0]);
+
+        // Execute one cycle to split
+        mars.step(&mut NullObserver);
+        assert_eq!(
+            mars.process_count(WarriorId(0)),
+            2,
+            "SPL must create two processes"
+        );
+
+        // SPL must enqueue the continuation first, before the split target.
+        // The front of the queue should be pc+1 (the continuation at pc=1), not pc=5 (the target).
+        // If the implementation enqueued in the wrong order, this would fail loudly.
+        assert_eq!(
+            mars.current_pc(WarriorId(0)),
+            Some(1),
+            "SPL must enqueue the continuation first, before the split target"
+        );
+
+        // Execute a second cycle to verify both processes are present and in the right order
+        mars.step(&mut NullObserver);
+        assert_eq!(
+            mars.process_count(WarriorId(0)),
+            1,
+            "continuation at pc=1 (DAT) should die, leaving only the split target"
+        );
+        assert_eq!(
+            mars.current_pc(WarriorId(0)),
+            Some(5),
+            "remaining process should be at the split target (pc=5)"
+        );
+    }
 }
