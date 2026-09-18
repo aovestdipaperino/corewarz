@@ -20,6 +20,8 @@ struct Cli {
 enum Command {
     /// Run one or more battles headlessly and report the results.
     Run(RunArgs),
+    /// Watch a single battle in a live terminal visualizer.
+    Watch(RunArgs),
 }
 
 #[derive(Args, Clone)]
@@ -140,10 +142,28 @@ fn run(args: &RunArgs) -> Result<(), String> {
     Ok(())
 }
 
+fn watch(args: &RunArgs) -> Result<(), String> {
+    let config = args.config();
+    let mut warriors = Vec::with_capacity(args.warriors.len());
+    for path in &args.warriors {
+        warriors.push(load(path, &config)?);
+    }
+    let positions = match &args.positions {
+        Some(explicit) => explicit.clone(),
+        None => battle::random_positions(&config, warriors.len(), args.seed),
+    };
+    let mars =
+        corewarz_core::Mars::try_new(config, warriors, &positions).map_err(|e| e.to_string())?;
+    corewarz_tui::App::new(mars)
+        .run()
+        .map_err(|e| e.to_string())
+}
+
 fn main() -> ExitCode {
     let cli = Cli::parse();
     let result = match &cli.command {
         Command::Run(args) => run(args),
+        Command::Watch(args) => watch(args),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,

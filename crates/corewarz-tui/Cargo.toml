@@ -1,0 +1,14 @@
+[package]
+name = "corewarz-tui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Terminal visualizer and debugger for CoreWarz"
+
+[dependencies]
+corewarz-core = { path = "../corewarz-core" }
+corewarz-asm = { path = "../corewarz-asm" }
+ratatui = "0.28"
+crossterm = "0.28"
