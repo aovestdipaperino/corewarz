@@ -6,6 +6,7 @@
 
 pub mod config;
 pub mod core;
+pub mod exec;
 pub mod instruction;
 pub mod warrior;
 
