@@ -16,6 +16,6 @@ pub mod warrior;
 pub use config::{Config, Dialect};
 pub use core::Core;
 pub use instruction::{AddrMode, Instruction, Modifier, Opcode};
-pub use mars::{Mars, Outcome, SeparationError};
+pub use mars::{AdmissionError, Mars, Outcome, SeparationError};
 pub use observer::{NullObserver, Observer};
 pub use warrior::{Warrior, WarriorId};

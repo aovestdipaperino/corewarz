@@ -43,6 +43,57 @@ impl std::fmt::Display for SeparationError {
 
 impl std::error::Error for SeparationError {}
 
+/// Why a set of warriors could not be admitted to a battle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AdmissionError {
+    /// Two warriors were placed too close together.
+    Separation(SeparationError),
+    /// A warrior contains a CoreWarz extension under the classic dialect.
+    ExtendedOpcode {
+        /// Index of the offending warrior.
+        warrior: usize,
+        /// Offset of the offending instruction within that warrior.
+        offset: usize,
+        /// The offending opcode.
+        opcode: crate::instruction::Opcode,
+    },
+    /// A warrior is longer than `Config::max_length`.
+    TooLong {
+        warrior: usize,
+        length: u32,
+        limit: u32,
+    },
+}
+
+impl std::fmt::Display for AdmissionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Separation(e) => write!(f, "{e}"),
+            Self::ExtendedOpcode {
+                warrior,
+                offset,
+                opcode,
+            } => write!(
+                f,
+                "warrior {warrior} instruction {offset}: {opcode:?} is a CoreWarz extension \
+                 and is illegal in classic mode"
+            ),
+            Self::TooLong {
+                warrior,
+                length,
+                limit,
+            } => {
+                write!(
+                    f,
+                    "warrior {warrior} is {length} instructions long, the limit is {limit}"
+                )
+            }
+        }
+    }
+}
+
+impl std::error::Error for AdmissionError {}
+
 /// A running battle.
 #[derive(Debug, Clone)]
 pub struct Mars {
@@ -54,6 +105,49 @@ pub struct Mars {
 }
 
 impl Mars {
+    /// Validates `warriors` against `config` and loads them at `positions`.
+    ///
+    /// This is the second of the two dialect chokepoints: the assembler
+    /// rejects extended opcodes in source, and this rejects them in any
+    /// warrior that reached the VM by another route. The interpreter's hot
+    /// loop therefore contains no dialect branch.
+    ///
+    /// # Errors
+    /// Returns the first [`AdmissionError`] found.
+    ///
+    /// # Panics
+    /// Panics if `positions.len() != warriors.len()`.
+    pub fn try_new(
+        config: Config,
+        warriors: Vec<Warrior>,
+        positions: &[u32],
+    ) -> Result<Self, AdmissionError> {
+        assert_eq!(warriors.len(), positions.len(), "one position per warrior");
+        Self::check_positions(&config, positions).map_err(AdmissionError::Separation)?;
+        for (index, warrior) in warriors.iter().enumerate() {
+            let length = u32::try_from(warrior.code.len()).unwrap_or(u32::MAX);
+            if length > config.max_length {
+                return Err(AdmissionError::TooLong {
+                    warrior: index,
+                    length,
+                    limit: config.max_length,
+                });
+            }
+            if config.dialect == crate::config::Dialect::Classic {
+                for (offset, instr) in warrior.code.iter().enumerate() {
+                    if instr.opcode.is_extended() {
+                        return Err(AdmissionError::ExtendedOpcode {
+                            warrior: index,
+                            offset,
+                            opcode: instr.opcode,
+                        });
+                    }
+                }
+            }
+        }
+        Ok(Self::new(config, warriors, positions))
+    }
+
     /// Loads `warriors` at `positions` and prepares them to run.
     ///
     /// `positions` must have the same length as `warriors`. Use
