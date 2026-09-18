@@ -209,4 +209,89 @@ mod tests {
         assert_eq!(ops.ira.a, 77);
         assert_eq!(ops.irb.a, 77);
     }
+
+    #[test]
+    fn both_operands_postinc_b_on_same_cell_increments_twice() {
+        let (mut core, w) = setup();
+        let mut target = Instruction::DAT_ZERO;
+        target.b = 50;
+        core.set(110, target, w);
+        // Both operands point to cell 110 via PostincB (100 + 10 = 110)
+        // PostincB uses the B field as offset: ptr + cell.b = 110 + 50 = 160
+        let i = instr(AddrMode::PostincB, 10, AddrMode::PostincB, 10);
+        let ops = resolve(&mut core, 100, i, w);
+        // Both should use the pre-increment B value as offset (50)
+        assert_eq!(
+            ops.a_ptr, 160,
+            "A-operand should use pre-increment B value as offset (110 + 50 = 160)"
+        );
+        assert_eq!(
+            ops.b_ptr, 160,
+            "B-operand should use pre-increment B value as offset (110 + 50 = 160)"
+        );
+        // Both deferred increments should apply: 50 + 1 + 1 = 52
+        assert_eq!(
+            core.get(110).b,
+            52,
+            "cell 110 B-field should be incremented by both operands (50 + 2 = 52), \
+             protecting against lost deferred side effects"
+        );
+    }
+
+    #[test]
+    fn both_operands_postinc_a_on_same_cell_increments_twice() {
+        let (mut core, w) = setup();
+        let mut target = Instruction::DAT_ZERO;
+        target.a = 50;
+        core.set(110, target, w);
+        // Both operands point to cell 110 via PostincA (100 + 10 = 110)
+        // PostincA uses the A field as offset: ptr + cell.a = 110 + 50 = 160
+        let i = instr(AddrMode::PostincA, 10, AddrMode::PostincA, 10);
+        let ops = resolve(&mut core, 100, i, w);
+        // Both should use the pre-increment A value as offset (50)
+        assert_eq!(
+            ops.a_ptr, 160,
+            "A-operand should use pre-increment A value as offset (110 + 50 = 160)"
+        );
+        assert_eq!(
+            ops.b_ptr, 160,
+            "B-operand should use pre-increment A value as offset (110 + 50 = 160)"
+        );
+        // Both deferred increments should apply: 50 + 1 + 1 = 52
+        assert_eq!(
+            core.get(110).a,
+            52,
+            "cell 110 A-field should be incremented by both operands (50 + 2 = 52), \
+             protecting against lost deferred side effects"
+        );
+    }
+
+    #[test]
+    fn predec_a_and_postinc_a_on_same_cell_preserves_both_effects() {
+        let (mut core, w) = setup();
+        let mut target = Instruction::DAT_ZERO;
+        target.a = 50;
+        core.set(110, target, w);
+        // A-operand pre-decrements cell 110, B-operand post-increments cell 110
+        let i = instr(AddrMode::PredecA, 10, AddrMode::PostincA, 10);
+        let ops = resolve(&mut core, 100, i, w);
+        // A-operand: predec first (50 -> 49), then use 49 as offset
+        assert_eq!(
+            ops.a_ptr, 159,
+            "A-operand should use post-predecrement value as offset (110 + 49 = 159)"
+        );
+        // B-operand: reads the already-decremented value (49), uses it as offset, defers increment
+        assert_eq!(
+            ops.b_ptr, 159,
+            "B-operand should read the decremented value and use it as offset (110 + 49 = 159), \
+             protecting order: predec happens during A's eval, postinc sees the result"
+        );
+        // Final value: 49 (after predec) + 1 (from deferred postinc) = 50
+        assert_eq!(
+            core.get(110).a,
+            50,
+            "cell 110 A-field should reflect both effects applied once in order: \
+             predec to 49, then postinc to 50"
+        );
+    }
 }
