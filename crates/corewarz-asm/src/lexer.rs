@@ -5,7 +5,10 @@
 pub struct Line {
     /// One-based source line number.
     pub number: usize,
-    /// The label in column one, if any.
+    /// The label, if any. Labels are not column-based: any leading token
+    /// that is not a known mnemonic (or, per the grammar fallback, not
+    /// followed by an operand-shaped token) is a label regardless of
+    /// indentation.
     pub label: Option<String>,
     /// The mnemonic or pseudo-op.
     pub mnemonic: Option<String>,
@@ -35,18 +38,19 @@ fn operand_like(token: &str) -> bool {
 
 /// Splits `source` into [`Line`]s, stripping comments and blank lines.
 ///
-/// A leading token is treated as a label when the line has more than one
-/// token and the first token is not a known mnemonic; the caller resolves
-/// that ambiguity by consulting `parse_opcode`. `allows_empty_operand`
-/// reports whether a mnemonic is legal with no operand at all (`END`, and
-/// the opcodes `DAT`/`NOP`/`RET`, whose emitter defaults a missing operand
-/// to direct zero); it is consulted only for a bare single-token line.
+/// Mnemonics (opcodes and pseudo-ops) are reserved words: the assembler
+/// rejects any label named after one (see `assemble::check_not_reserved`),
+/// so whenever `head` IS a known mnemonic it is unambiguously the
+/// instruction, regardless of indentation or what follows (this also
+/// covers a mnemonic standing alone with no operand, e.g. `END`). The
+/// remaining ambiguity is a typo'd opcode versus a label: when `head` is
+/// NOT a known mnemonic, the grammar decides instead of the dictionary —
+/// after a label only a mnemonic can follow, never an operand, so `head` is
+/// treated as the (unrecognised) mnemonic itself only when what follows is
+/// operand-shaped (`FROB $0, $0`); otherwise `head` is a label (`step EQU
+/// 4`, `mylabel FROB $0,$0` blames `FROB`).
 #[must_use]
-pub fn lex(
-    source: &str,
-    is_mnemonic: &dyn Fn(&str) -> bool,
-    allows_empty_operand: &dyn Fn(&str) -> bool,
-) -> Vec<Line> {
+pub fn lex(source: &str, is_mnemonic: &dyn Fn(&str) -> bool) -> Vec<Line> {
     let mut out = Vec::new();
     for (index, raw) in source.lines().enumerate() {
         let text = raw.split(';').next().unwrap_or("").trim();
@@ -61,47 +65,8 @@ pub fn lex(
             number: index + 1,
             ..Line::default()
         };
-        // `head` is ambiguous when it matches a mnemonic (opcode or
-        // pseudo-op) that also happens to be used as a label, e.g. a label
-        // named `end` or `mov` on its own line, followed by a real
-        // instruction. Two cases resolve this, and they are NOT
-        // interchangeable — each covers a different shape of ambiguity:
-        //
-        // 1. When there is NO remainder (a single bare token on the line),
-        //    `head` can only be a standalone instruction if that mnemonic is
-        //    legal with zero operands. Every opcode this assembler supports
-        //    requires at least one operand except `DAT`/`NOP`/`RET` (whose
-        //    emitter defaults the missing operand to direct zero), and the
-        //    only operand-less pseudo-op is `END`. Anything else standing
-        //    alone on a line — e.g. `mov`, which requires an operand and
-        //    cannot appear bare as an instruction — must be a label naming
-        //    the following line, not an ill-formed instruction.
-        // 2. When there IS a remainder, neither "is `head` a mnemonic?" nor
-        //    "is `rest_first` a mnemonic?" alone can disambiguate: a typo'd
-        //    opcode (`FROB $0, $0`, `mylabel FROB $0,$0`) has an unrecognised
-        //    `head` in both the labelled and unlabelled case. Instead:
-        //      - If `head` IS a recognised mnemonic, `head` is a label only
-        //        when `rest_first` is *also* a mnemonic ("label MOV.I ...");
-        //        pseudo-ops and opcodes never nest, so two mnemonics on one
-        //        line can only be "label mnemonic ...".
-        //      - If `head` is NOT a recognised mnemonic, fall back to the
-        //        grammar instead of the dictionary: after a LABEL only a
-        //        mnemonic can follow, never an operand, while after a
-        //        MNEMONIC only operands can follow, never another bare
-        //        identifier. So `head` is treated as the (typo'd) mnemonic
-        //        iff `rest_first` is operand-shaped ("FROB $0, $0",
-        //        "mylabel FROB $0,$0" -> FROB is blamed either way); if
-        //        `rest_first` instead looks like a bare identifier ("ORG
-        //        go", "JMP start" would never reach this arm since ORG/JMP
-        //        are known; "step EQU 4") `head` is a label.
         let rest_first = rest.split_whitespace().next().unwrap_or("");
-        let head_is_instruction = if rest_first.is_empty() {
-            is_mnemonic(head) && allows_empty_operand(head)
-        } else if is_mnemonic(head) {
-            !is_mnemonic(rest_first)
-        } else {
-            operand_like(rest_first)
-        };
+        let head_is_instruction = is_mnemonic(head) || operand_like(rest_first);
         let body = if head_is_instruction {
             text
         } else {

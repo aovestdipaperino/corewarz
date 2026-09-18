@@ -27,6 +27,9 @@ pub enum AsmErrorKind {
     BadNumber(String),
     /// The instruction needs at least one operand and none was given.
     MissingOperand,
+    /// A label was named after a mnemonic (opcode or pseudo-op), which
+    /// pMARS reserves as a keyword and never allows as an identifier.
+    ReservedWord(String),
 }
 
 impl std::fmt::Display for AsmErrorKind {
@@ -53,6 +56,9 @@ impl std::fmt::Display for AsmErrorKind {
             Self::MalformedOperand(s) => write!(f, "malformed operand `{s}`"),
             Self::BadNumber(s) => write!(f, "`{s}` is not a number"),
             Self::MissingOperand => write!(f, "missing operand"),
+            Self::ReservedWord(s) => {
+                write!(f, "`{s}` is a mnemonic and cannot be used as a label")
+            }
         }
     }
 }

@@ -20,14 +20,7 @@ fn is_pseudo(text: &str) -> bool {
 pub fn assemble(source: &str, config: &Config) -> Result<Warrior, AsmError> {
     let is_mnemonic =
         |t: &str| parse_opcode(t.split('.').next().unwrap_or(t)).is_some() || is_pseudo(t);
-    let allows_empty_operand = |t: &str| {
-        t.eq_ignore_ascii_case("END")
-            || matches!(
-                parse_opcode(t),
-                Some(Opcode::Dat | Opcode::Nop | Opcode::Ret)
-            )
-    };
-    let lines = lex(source, &is_mnemonic, &allows_empty_operand);
+    let lines = lex(source, &is_mnemonic);
 
     // --- pass one: labels, EQUs, ORG ---
     let mut labels: HashMap<String, i64> = HashMap::new();
@@ -46,6 +39,7 @@ pub fn assemble(source: &str, config: &Config) -> Result<Warrior, AsmError> {
                     line: line.number,
                     kind: AsmErrorKind::MissingOperand,
                 })?;
+                check_not_reserved(&name, &is_mnemonic, line.number)?;
                 equs.insert(name.to_ascii_lowercase(), value);
             }
             "ORG" | "END" => {
@@ -55,11 +49,13 @@ pub fn assemble(source: &str, config: &Config) -> Result<Warrior, AsmError> {
             }
             "" => {
                 if let Some(label) = &line.label {
+                    check_not_reserved(label, &is_mnemonic, line.number)?;
                     insert_label(&mut labels, label, offset, line.number)?;
                 }
             }
             _ => {
                 if let Some(label) = &line.label {
+                    check_not_reserved(label, &is_mnemonic, line.number)?;
                     insert_label(&mut labels, label, offset, line.number)?;
                 }
                 offset += 1;
@@ -111,6 +107,22 @@ pub fn assemble(source: &str, config: &Config) -> Result<Warrior, AsmError> {
         code,
         start,
     })
+}
+
+/// Rejects a label/EQU name that parses as a mnemonic (opcode or
+/// pseudo-op), matching pMARS treating mnemonics as reserved words.
+fn check_not_reserved(
+    name: &str,
+    is_mnemonic: &dyn Fn(&str) -> bool,
+    line: usize,
+) -> Result<(), AsmError> {
+    if is_mnemonic(name) {
+        return Err(AsmError {
+            line,
+            kind: AsmErrorKind::ReservedWord(name.to_string()),
+        });
+    }
+    Ok(())
 }
 
 fn insert_label(
@@ -228,4 +240,44 @@ fn emit(
         b_mode,
         b: u32::try_from(b_value.rem_euclid(size)).unwrap_or(0),
     })
+}
+
+#[cfg(test)]
+mod reserved_word_tests {
+    use super::check_not_reserved;
+    use crate::error::AsmErrorKind;
+
+    fn is_mnemonic(t: &str) -> bool {
+        crate::modifier::parse_opcode(t.split('.').next().unwrap_or(t)).is_some()
+            || matches!(t.to_ascii_uppercase().as_str(), "EQU" | "ORG" | "END")
+    }
+
+    // The public lexer/assembler surface can no longer construct a `Line`
+    // whose label equals a mnemonic (see `lexer::lex`'s doc comment): any
+    // leading token that is a known mnemonic is unconditionally lexed as
+    // the instruction, never a label. `check_not_reserved` is therefore a
+    // structural invariant guard exercised directly here rather than
+    // through `assemble()`, proving the `ReservedWord` variant and its
+    // message are correct should that invariant ever be violated (e.g. by
+    // a future lexer change).
+    #[test]
+    fn rejects_names_that_parse_as_a_mnemonic_case_insensitively() {
+        for name in ["mov", "MOV", "End", "org", "dat", "Jmp"] {
+            let err = check_not_reserved(name, &is_mnemonic, 3).unwrap_err();
+            assert_eq!(err.line, 3);
+            assert!(matches!(err.kind, AsmErrorKind::ReservedWord(ref s) if s == name));
+        }
+    }
+
+    #[test]
+    fn accepts_names_that_are_not_mnemonics() {
+        assert!(check_not_reserved("start", &is_mnemonic, 1).is_ok());
+        assert!(check_not_reserved("dat1", &is_mnemonic, 1).is_ok());
+    }
+
+    #[test]
+    fn reserved_word_error_message_names_the_word() {
+        let msg = AsmErrorKind::ReservedWord("mov".to_string()).to_string();
+        assert!(msg.contains("mov"));
+    }
 }

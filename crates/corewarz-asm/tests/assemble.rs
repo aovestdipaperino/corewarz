@@ -52,7 +52,9 @@ fn resolves_labels_as_relative_offsets() {
 
 #[test]
 fn resolves_forward_labels() {
-    let src = "       JMP  $end, $0\n       DAT  $0, $0\nend    MOV.I $0, $1\n";
+    // `end` is a reserved pseudo-op name (see FIX 1) and can no longer be
+    // used as a label, so this uses `target` instead.
+    let src = "       JMP  $target, $0\n       DAT  $0, $0\ntarget    MOV.I $0, $1\n";
     let w = assemble(src, &cfg()).unwrap();
     assert_eq!(w.code[0].a, 2);
 }
@@ -238,31 +240,34 @@ fn duplicate_labels_are_rejected() {
 }
 
 #[test]
-fn a_label_named_after_an_opcode_resolves_correctly() {
-    // `mov` alone on its own line is a label, not an ill-formed instruction:
-    // MOV always requires an operand, so a bare `mov` cannot itself be one.
-    let w = assemble("mov\nMOV.I $0,$1\n", &cfg()).unwrap();
-    assert_eq!(w.code.len(), 1);
+fn a_bare_mnemonic_with_no_operand_is_a_missing_operand_not_a_label() {
+    // Mnemonics are reserved words (see FIX 1): `mov` standing alone can no
+    // longer be lexed as a label naming the next line. A known mnemonic as
+    // the leading token is now unconditionally the instruction, so a bare
+    // `mov` is simply MOV missing its operand -- matching pMARS, which
+    // reports a syntax error for the same input. This deliberately changes
+    // prior behaviour, which silently accepted `mov` as a label name.
+    let err = assemble("mov\nMOV.I $0,$1\n", &cfg()).unwrap_err();
+    assert_eq!(err.line, 1);
+    assert!(matches!(err.kind, AsmErrorKind::MissingOperand));
 }
 
 #[test]
-fn a_label_named_end_resolves_correctly() {
-    // Unlike `mov`, a bare `end` is not resolvable as a label: `END` is
-    // legal with zero operands, so a lone `end` line is the pseudo-op
-    // itself, per the existing (and preserved) "END alone" behaviour. The
-    // label form only works when paired with an instruction on the same
-    // line, exactly like the `mov`/`DAT` case below.
+fn end_can_no_longer_be_used_as_a_label() {
+    // `end` is reserved just like any other mnemonic; a leading `end` is
+    // now unconditionally the pseudo-op, never a label naming a following
+    // instruction. The garbled remainder surfaces as a parse error.
     let src = "end DAT $0,$0\nJMP $end, $0\n";
-    let w = assemble(src, &cfg()).unwrap();
-    assert_eq!(w.code.len(), 2);
-    assert_eq!(w.code[1].a, 7999, "JMP back one cell is -1, folded");
+    assert!(assemble(src, &cfg()).is_err());
 }
 
 #[test]
-fn label_sharing_an_opcode_name_with_an_instruction_on_the_same_line() {
-    let w = assemble("mov DAT $0,$0\n", &cfg()).unwrap();
-    assert_eq!(w.code.len(), 1);
-    assert_eq!(w.code[0].opcode, Opcode::Dat);
+fn mnemonic_used_as_a_label_on_the_same_line_as_another_instruction_is_no_longer_a_label() {
+    // `mov` is reserved and is always lexed as the instruction now, so
+    // `mov DAT $0,$0` is MOV with a garbled operand, not a label sharing a
+    // name with DAT. Matches pMARS, which errors on this input too
+    // ("Improper placement of 'mov'").
+    assert!(assemble("mov DAT $0,$0\n", &cfg()).is_err());
 }
 
 #[test]
