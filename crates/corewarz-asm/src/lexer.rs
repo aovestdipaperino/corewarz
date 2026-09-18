@@ -74,7 +74,13 @@ pub fn lex(
         let head_is_instruction = if rest_first.is_empty() {
             is_mnemonic(head) && allows_empty_operand(head)
         } else {
-            is_mnemonic(head) && !is_mnemonic(rest_first)
+            // `head` is a label only when the next token is itself a
+            // recognised mnemonic ("label MOV.I ..."). Otherwise `head` is
+            // the intended mnemonic, even if it turns out to be unknown
+            // (e.g. a typo like "FROB $0, $0"): an unrecognised opcode
+            // should be reported by name, not misfiled as a label with the
+            // error pointing at its first operand.
+            !is_mnemonic(rest_first)
         };
         let body = if head_is_instruction {
             text

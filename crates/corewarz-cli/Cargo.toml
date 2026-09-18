@@ -1,0 +1,17 @@
+[package]
+name = "corewarz-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Command-line interface for CoreWarz"
+
+[[bin]]
+name = "corewarz"
+path = "src/main.rs"
+
+[dependencies]
+corewarz-core = { path = "../corewarz-core" }
+corewarz-asm = { path = "../corewarz-asm" }
+clap = { version = "4", features = ["derive"] }
