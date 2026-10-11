@@ -19,6 +19,7 @@
 //! - [`Observer`] is the sole interface the VM exposes to anything watching a
 //!   battle (a visualizer, a differential-test harness); [`NullObserver`] is
 //!   the zero-cost default a headless run uses.
+//! - [`placement`] places warriors reproducibly from a seed.
 //! - [`Config`] and [`Dialect`] select core size, cycle/process limits, and
 //!   whether the extended opcodes are legal.
 //!
@@ -32,6 +33,7 @@ pub mod exec;
 pub mod instruction;
 pub mod mars;
 pub mod observer;
+pub mod placement;
 pub mod queue;
 pub mod warrior;
 

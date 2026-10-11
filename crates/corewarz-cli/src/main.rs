@@ -7,6 +7,7 @@ use std::process::ExitCode;
 
 use clap::{Args, Parser, Subcommand};
 use corewarz_asm::assemble;
+use corewarz_core::placement::random_positions;
 use corewarz_core::{Config, Dialect, Outcome, Warrior, WarriorId};
 
 #[derive(Parser)]
@@ -129,7 +130,7 @@ fn run(args: &RunArgs) -> Result<(), String> {
     for round in 0..args.rounds {
         let positions = match &args.positions {
             Some(explicit) => explicit.clone(),
-            None => battle::random_positions(
+            None => random_positions(
                 &config,
                 warriors.len(),
                 args.seed.wrapping_add(u64::from(round)),
@@ -165,7 +166,7 @@ fn watch(args: &RunArgs) -> Result<(), String> {
     validate_positions(&args.positions, warriors.len())?;
     let positions = match &args.positions {
         Some(explicit) => explicit.clone(),
-        None => battle::random_positions(&config, warriors.len(), args.seed),
+        None => random_positions(&config, warriors.len(), args.seed),
     };
     let mars =
         corewarz_core::Mars::try_new(config, warriors, &positions).map_err(|e| e.to_string())?;
