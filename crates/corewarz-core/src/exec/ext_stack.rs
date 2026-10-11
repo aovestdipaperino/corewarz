@@ -5,24 +5,33 @@
 //! can be read, corrupted, or overwritten with a chosen return address. This
 //! is deliberate. No process has private state.
 //!
-//! A *stack-pointer cell* holds the current stack pointer in its B-field. The
-//! stack grows upward and wraps like all core arithmetic.
+//! A *stack-pointer cell* holds the current stack pointer in its B-field,
+//! relative to the stack-pointer cell itself, exactly as `@` indirection reads
+//! a B-field. A warrior can therefore point at its own stack with
+//! `sp DAT #0, #stack` and have it work wherever it is loaded. The stack grows
+//! upward and wraps like all core arithmetic. Return addresses are absolute:
+//! `CALL` computes them at run time, so they need no load-time knowledge.
 
 use crate::core::Core;
 use crate::exec::classic_data::StepResult;
 use crate::exec::operand::Operands;
 use crate::warrior::WarriorId;
 
-/// Reads the stack pointer out of the cell at `sp_cell`.
+/// Reads the stack-pointer field out of the cell at `sp_cell`.
 fn load_sp(core: &Core, sp_cell: u32) -> u32 {
     core.get(sp_cell).b
 }
 
-/// Writes `value` back into the stack-pointer cell at `sp_cell`.
-fn store_sp(core: &mut Core, sp_cell: u32, value: u32, owner: WarriorId) {
+/// Writes `field` back into the stack-pointer cell at `sp_cell`.
+fn store_sp(core: &mut Core, sp_cell: u32, field: u32, owner: WarriorId) {
     let mut cell = core.get(sp_cell);
-    cell.b = value;
+    cell.b = field;
     core.set(sp_cell, cell, owner);
+}
+
+/// The absolute address a stack-pointer `field` held in `sp_cell` designates.
+fn slot(core: &Core, sp_cell: u32, field: u32) -> u32 {
+    core.fold(i64::from(sp_cell) + i64::from(field))
 }
 
 /// Writes `value` into the B-field of the cell at `addr`.
@@ -38,10 +47,10 @@ fn store_b(core: &mut Core, addr: u32, value: u32, owner: WarriorId) {
 /// the A-operand.
 pub fn exec_call(core: &mut Core, pc: u32, ops: Operands, owner: WarriorId) -> StepResult {
     let sp_cell = ops.b_ptr;
-    let sp = core.fold(i64::from(load_sp(core, sp_cell)));
+    let field = load_sp(core, sp_cell);
     let return_address = core.fold(i64::from(pc) + 1);
-    store_b(core, sp, return_address, owner);
-    store_sp(core, sp_cell, core.fold(i64::from(sp) + 1), owner);
+    store_b(core, slot(core, sp_cell, field), return_address, owner);
+    store_sp(core, sp_cell, core.fold(i64::from(field) + 1), owner);
     StepResult::Jump(ops.a_ptr)
 }
 
@@ -52,10 +61,10 @@ pub fn exec_call(core: &mut Core, pc: u32, ops: Operands, owner: WarriorId) -> S
 /// else; there is no error condition.
 pub fn exec_ret(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult {
     let sp_cell = ops.a_ptr;
-    let sp = core.fold(i64::from(load_sp(core, sp_cell)) - 1);
-    store_sp(core, sp_cell, sp, owner);
-    let target = core.get(sp).b;
-    StepResult::Jump(target)
+    let field = core.fold(i64::from(load_sp(core, sp_cell)) - 1);
+    store_sp(core, sp_cell, field, owner);
+    let target = core.get(slot(core, sp_cell, field)).b;
+    StepResult::Jump(core.fold(i64::from(target)))
 }
 
 /// Executes `PUSH val, sp`.
@@ -67,9 +76,9 @@ pub fn exec_ret(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult 
 /// saving data and symmetric with [`exec_pop`].
 pub fn exec_push(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult {
     let sp_cell = ops.b_ptr;
-    let sp = core.fold(i64::from(load_sp(core, sp_cell)));
-    store_b(core, sp, ops.ira.b, owner);
-    store_sp(core, sp_cell, core.fold(i64::from(sp) + 1), owner);
+    let field = load_sp(core, sp_cell);
+    store_b(core, slot(core, sp_cell, field), ops.ira.b, owner);
+    store_sp(core, sp_cell, core.fold(i64::from(field) + 1), owner);
     StepResult::Continue
 }
 
@@ -79,9 +88,9 @@ pub fn exec_push(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult
 /// the A-operand's cell.
 pub fn exec_pop(core: &mut Core, ops: Operands, owner: WarriorId) -> StepResult {
     let sp_cell = ops.b_ptr;
-    let sp = core.fold(i64::from(load_sp(core, sp_cell)) - 1);
-    store_sp(core, sp_cell, sp, owner);
-    let value = core.get(sp).b;
+    let field = core.fold(i64::from(load_sp(core, sp_cell)) - 1);
+    store_sp(core, sp_cell, field, owner);
+    let value = core.get(slot(core, sp_cell, field)).b;
     store_b(core, ops.a_ptr, value, owner);
     StepResult::Continue
 }
@@ -95,9 +104,11 @@ mod tests {
 
     const SP_CELL: u32 = 10;
     const STACK_BASE: u32 = 500;
+    /// The stack-pointer field that designates [`STACK_BASE`] from [`SP_CELL`].
+    const SP_FIELD: u32 = STACK_BASE - SP_CELL;
 
-    /// Builds a core with a stack-pointer cell at [`SP_CELL`] pointing at
-    /// [`STACK_BASE`], executes `instr` at address 0, and returns the core and
+    /// Builds a core with a stack-pointer cell at [`SP_CELL`] holding
+    /// `sp_value`, executes `instr` at address 0, and returns the core and
     /// step result.
     fn run(opcode: Opcode, a: u32, b: u32, sp_value: u32) -> (Core, StepResult) {
         let mut core = Core::new(&Config::default());
@@ -132,14 +143,10 @@ mod tests {
 
     #[test]
     fn call_pushes_the_return_address_and_jumps() {
-        let (core, r) = run(Opcode::Call, 300, SP_CELL, STACK_BASE);
+        let (core, r) = run(Opcode::Call, 300, SP_CELL, SP_FIELD);
         assert_eq!(r, StepResult::Jump(300), "jumps to the A-operand");
         assert_eq!(core.get(STACK_BASE).b, 1, "return address is pc + 1");
-        assert_eq!(
-            core.get(SP_CELL).b,
-            STACK_BASE + 1,
-            "stack pointer advanced"
-        );
+        assert_eq!(core.get(SP_CELL).b, SP_FIELD + 1, "stack pointer advanced");
     }
 
     #[test]
@@ -158,7 +165,7 @@ mod tests {
         core.set(
             SP_CELL,
             Instruction {
-                b: STACK_BASE + 1,
+                b: SP_FIELD + 1,
                 ..Instruction::DAT_ZERO
             },
             w,
@@ -173,7 +180,7 @@ mod tests {
         );
         let ops = resolve(&mut core, 0, instr, w);
         assert_eq!(exec_ret(&mut core, ops, w), StepResult::Jump(42));
-        assert_eq!(core.get(SP_CELL).b, STACK_BASE, "stack pointer retreated");
+        assert_eq!(core.get(SP_CELL).b, SP_FIELD, "stack pointer retreated");
     }
 
     #[test]
@@ -192,7 +199,7 @@ mod tests {
         core.set(
             SP_CELL,
             Instruction {
-                b: STACK_BASE,
+                b: SP_FIELD,
                 ..Instruction::DAT_ZERO
             },
             w,
@@ -217,7 +224,7 @@ mod tests {
         );
         assert_eq!(
             core.get(SP_CELL).b,
-            STACK_BASE,
+            SP_FIELD,
             "pointer is back where it started"
         );
     }
@@ -229,7 +236,7 @@ mod tests {
         core.set(
             SP_CELL,
             Instruction {
-                b: STACK_BASE,
+                b: SP_FIELD,
                 ..Instruction::DAT_ZERO
             },
             w,
@@ -255,7 +262,7 @@ mod tests {
         let ops = resolve(&mut core, 0, push, w);
         assert_eq!(exec_push(&mut core, ops, w), StepResult::Continue);
         assert_eq!(core.get(STACK_BASE).b, 1234);
-        assert_eq!(core.get(SP_CELL).b, STACK_BASE + 1);
+        assert_eq!(core.get(SP_CELL).b, SP_FIELD + 1);
 
         let pop = Instruction {
             opcode: Opcode::Pop,
@@ -269,7 +276,7 @@ mod tests {
         let ops = resolve(&mut core, 0, pop, w);
         assert_eq!(exec_pop(&mut core, ops, w), StepResult::Continue);
         assert_eq!(core.get(21).b, 1234, "the value came back");
-        assert_eq!(core.get(SP_CELL).b, STACK_BASE);
+        assert_eq!(core.get(SP_CELL).b, SP_FIELD);
     }
 
     #[test]
@@ -288,9 +295,9 @@ mod tests {
         // It may land anywhere; it must not panic.
         let (core, r) = run(Opcode::Call, 300, SP_CELL, 99_999);
         assert!(matches!(r, StepResult::Jump(300)), "no panic, just a jump");
-        // 99_999 folded into an 8000-cell core is 99_999 % 8000 = 3999.
+        // SP_CELL + 99_999 folded into an 8000-cell core is 100_009 % 8000 = 4009.
         assert_eq!(
-            core.get(3999).b,
+            core.get(4009).b,
             1,
             "return address landed at the folded cell"
         );
@@ -327,7 +334,7 @@ mod tests {
         core.set(0, push, w);
         let ops = resolve(&mut core, 0, push, w);
         assert_eq!(exec_push(&mut core, ops, w), StepResult::Continue);
-        assert_eq!(core.get(3999).b, 1234, "value landed at the folded cell");
+        assert_eq!(core.get(4009).b, 1234, "value landed at the folded cell");
     }
 
     #[test]

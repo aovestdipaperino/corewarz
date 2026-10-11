@@ -157,7 +157,9 @@ private, un-attackable state; this preserves Core War's central invariant that a
 memory is contested.
 
 A *stack pointer cell* is an ordinary core cell whose B-field holds the current
-stack pointer (an address).
+stack pointer, relative to the stack pointer cell itself as `@` indirection reads
+it, so a warrior's stack works wherever the warrior is loaded. Return addresses
+pushed by `CALL` are absolute, since they are computed at run time.
 
 - `CALL target, sp` — push the return address (the address of the instruction
   following the `CALL`) at the stack pointer, advance the pointer, jump to `target`.

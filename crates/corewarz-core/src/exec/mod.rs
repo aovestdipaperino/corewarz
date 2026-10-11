@@ -275,7 +275,7 @@ mod dispatch_wiring_tests {
         core.set(
             10,
             Instruction {
-                b: 500,
+                b: 490,
                 ..Instruction::DAT_ZERO
             },
             w,
@@ -287,7 +287,7 @@ mod dispatch_wiring_tests {
             1,
             "pushed pc + 1, not RET's or PUSH's shape"
         );
-        assert_eq!(core.get(10).b, 501, "stack pointer advanced");
+        assert_eq!(core.get(10).b, 491, "stack pointer advanced");
     }
 
     #[test]
@@ -306,7 +306,7 @@ mod dispatch_wiring_tests {
         core.set(
             10,
             Instruction {
-                b: 501,
+                b: 491,
                 ..Instruction::DAT_ZERO
             },
             w,
@@ -321,7 +321,7 @@ mod dispatch_wiring_tests {
         );
         let r = dispatch(&mut core, 0, w);
         assert_eq!(r, StepResult::Jump(42), "distinct from CALL's Jump(300)");
-        assert_eq!(core.get(10).b, 500, "stack pointer retreated");
+        assert_eq!(core.get(10).b, 490, "stack pointer retreated");
     }
 
     #[test]
@@ -340,7 +340,7 @@ mod dispatch_wiring_tests {
         core.set(
             10,
             Instruction {
-                b: 500,
+                b: 490,
                 ..Instruction::DAT_ZERO
             },
             w,
@@ -360,7 +360,7 @@ mod dispatch_wiring_tests {
             4321,
             "pushed the A-operand's B-field value"
         );
-        assert_eq!(core.get(10).b, 501);
+        assert_eq!(core.get(10).b, 491);
     }
 
     #[test]
@@ -370,7 +370,7 @@ mod dispatch_wiring_tests {
         core.set(
             10,
             Instruction {
-                b: 501,
+                b: 491,
                 ..Instruction::DAT_ZERO
             },
             w,
@@ -399,6 +399,6 @@ mod dispatch_wiring_tests {
             777,
             "popped value landed in the A-operand's cell"
         );
-        assert_eq!(core.get(10).b, 500, "stack pointer retreated");
+        assert_eq!(core.get(10).b, 490, "stack pointer retreated");
     }
 }

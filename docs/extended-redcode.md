@@ -191,10 +191,13 @@ opcodes (write them bare, or with no suffix at all).
 ### The calling convention
 
 - A **stack-pointer cell** is an ordinary core cell whose **B-field** holds
-  the current stack pointer — an address into the core. There is nothing
-  special about this cell other than convention: any warrior can designate
-  any cell as its stack pointer, and the opcodes below only ever read and
-  write its B-field.
+  the current stack pointer as an offset **relative to the stack-pointer cell
+  itself**, exactly the way `@` indirection reads a B-field. A warrior can
+  therefore write `sp DAT.F #0, #stack` and have the pointer find its own
+  `stack` label wherever the warrior is loaded. There is nothing special
+  about this cell other than convention: any warrior can designate any cell
+  as its stack pointer, and the opcodes below only ever read and write its
+  B-field.
 - `CALL`, `PUSH`, and `POP` take the stack-pointer cell from their **second**
   operand (`sp`, the B-operand). `RET` takes it from its **first and only**
   operand (`sp`, the A-operand).
@@ -209,7 +212,9 @@ opcodes (write them bare, or with no suffix at all).
   implementation.)
 - `CALL target, sp` pushes the address of the instruction immediately
   following the `CALL` (the return address), advances the pointer, then jumps
-  to `target`.
+  to `target`. Unlike the stack pointer, the return address is an
+  **absolute** core address: `CALL` computes it at run time, so it needs no
+  knowledge of where the warrior was loaded, and `RET` jumps straight to it.
 - `RET sp` retreats the pointer first, then jumps to whatever address is
   stored at the cell the (now retreated) pointer designates.
 - `POP dst, sp` retreats the pointer, reads the value stored there, and
@@ -236,7 +241,7 @@ that are intended, not bugs:
 ```redcode
 ;name call-ret-demo
 ;strategy sp is the stack-pointer cell: its B-field holds the current stack
-;strategy pointer, an address into the core. CALL pushes the return address
+;strategy pointer, relative to sp itself. CALL pushes the return address
 ;strategy (the instruction after the CALL) at that pointer, advances the
 ;strategy pointer, and jumps to subr. RET there retreats the pointer and jumps
 ;strategy back, landing on the JMP just after the CALL.
