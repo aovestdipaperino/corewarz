@@ -48,6 +48,25 @@ Run `corewarz run --help` or `corewarz watch --help` for the full set of
 flags (core size, cycle limit, process limit, warrior length, minimum
 separation, rounds, placement seed).
 
+## Running in a browser
+
+The whole simulator also compiles to WebAssembly and runs in a static web
+page with a canvas view of the core, editable warriors (or any of the bundled
+samples), and the same run/step/speed controls as the terminal visualizer.
+It needs [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) and the
+`wasm32-unknown-unknown` target:
+
+```bash
+rustup target add wasm32-unknown-unknown
+./web/build.sh
+python3 -m http.server --directory web 8000
+```
+
+Then open <http://localhost:8000>. The page is plain HTML, CSS and an ES
+module, so `web/` (with the generated `web/pkg/`) can be published to any
+static host as is. Placement uses the same seeded algorithm as the CLI, so a
+given seed reproduces the same battle in both.
+
 ## Crate layout
 
 | Crate | Purpose |
@@ -56,6 +75,7 @@ separation, rounds, placement seed).
 | `corewarz-asm` | Assembler and disassembler for classic and extended Redcode, including the modifier-legality table and the round-trip guarantees. |
 | `corewarz-tui` | The live terminal visualizer (`ratatui` + `crossterm`), implemented purely as an `Observer` over a `Mars` it drives. |
 | `corewarz-cli` | The `corewarz` binary: `run` (headless battles and reports) and `watch` (the visualizer). |
+| `corewarz-web` | WebAssembly bindings (`wasm-bindgen`) that let the page in `web/` drive a battle, plus the bundled sample warriors. |
 
 ## Running the tests
 

@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/corewarz-core", "crates/corewarz-asm", "crates/corewarz-cli", "crates/corewarz-tui"]
+members = ["crates/corewarz-core", "crates/corewarz-asm", "crates/corewarz-cli", "crates/corewarz-tui", "crates/corewarz-web"]
 
 [workspace.package]
 version = "0.1.0"

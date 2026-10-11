@@ -1,0 +1,16 @@
+[package]
+name = "corewarz-web"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "WebAssembly bindings that run CoreWarz battles in a browser"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+corewarz-core = { path = "../corewarz-core" }
+corewarz-asm = { path = "../corewarz-asm" }
+wasm-bindgen = "0.2"
