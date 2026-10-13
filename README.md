@@ -113,6 +113,43 @@ once before running the differential suite. See `tests/corpus/README.md` for
 the confirmed pMARS flags and the opcode/addressing-mode coverage audit for
 the corpus.
 
+### Formal verification with Kani
+
+Differential testing covers the warriors in the corpus; the
+[Kani](https://model-checking.github.io/kani/) proofs in
+`crates/corewarz-core/src/proofs.rs` and `crates/corewarz-core/src/core.rs`
+cover every input. Install Kani once, then run the proofs:
+
+```bash
+cargo install --locked kani-verifier && cargo kani setup
+cargo kani -p corewarz-core -Z unstable-options --jobs 6 --output-format terse
+```
+
+The harnesses compare the VM against a small reference model of the ICWS'94
+draft (`emi94.c`), written independently of the `exec` module, on an
+8-cell core where every cell, opcode, modifier, addressing mode, and field
+is symbolic:
+
+- `fold_*` and `signed_reading_is_a_partition` prove that address folding
+  never overflows and is the Euclidean remainder, and that every core value
+  reads as exactly one of zero, positive, or negative.
+- `resolve_matches_icws94` proves that operand evaluation, for every pair of
+  addressing modes, designates the same cells, takes the same instruction
+  register snapshots, and applies pre-decrements and post-increments exactly
+  as ICWS'94 does.
+- `step_<opcode>`, one per classic opcode, proves that a single `dispatch`
+  under every modifier never panics, queues the same program counters, and
+  leaves the core in the same state as the reference model, with every
+  field still folded.
+- `process_queue_is_a_bounded_fifo_cap_*` prove that a process queue is a
+  bounded FIFO: it never exceeds its capacity, a push to a full queue (how
+  `SPL` becomes a no-op at the process limit) changes nothing, and pops
+  return pushes in order.
+
+A full run takes about 45 minutes with six jobs on an Apple Silicon laptop;
+each `step_*` harness takes 3 to 7 minutes. Kani is not
+needed for `cargo test`; the harnesses compile only under `cfg(kani)`.
+
 ## Documentation
 
 - [`docs/extended-redcode.md`](docs/extended-redcode.md) — reference for

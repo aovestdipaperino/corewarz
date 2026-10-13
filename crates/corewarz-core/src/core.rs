@@ -166,3 +166,75 @@ mod tests {
         assert!(!c.is_positive(4001));
     }
 }
+
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    fn core_of(size: u32) -> Core {
+        Core {
+            cells: Vec::new(),
+            owners: Vec::new(),
+            size,
+            writes: Vec::new(),
+        }
+    }
+
+    fn any_core() -> Core {
+        let size: u32 = kani::any();
+        kani::assume(size >= 4);
+        core_of(size)
+    }
+
+    /// `fold` never panics or overflows and is exactly the Euclidean
+    /// remainder. A symbolic 64-bit divisor is beyond what CBMC solves in
+    /// reasonable time, so this is checked for every `i64` at the standard
+    /// ICWS'94 core size of 8000 and at the size the step proofs use.
+    fn check_fold(size: u32) {
+        let core = core_of(size);
+        let v: i64 = kani::any();
+        let r = core.fold(v);
+        assert!(r < size);
+        assert_eq!(i64::from(r), v.rem_euclid(i64::from(size)));
+    }
+
+    #[kani::proof]
+    fn fold_is_euclidean_remainder_at_8000() {
+        check_fold(8000);
+    }
+
+    #[kani::proof]
+    fn fold_is_euclidean_remainder_at_8() {
+        check_fold(8);
+    }
+
+    /// For any core size, folding a value already in `0..size` (the
+    /// commonest call, `fold(field)`) is the identity, and folding
+    /// `addr + offset` for two in-range values lands in range.
+    #[kani::proof]
+    fn fold_of_an_address_sum_is_in_range_for_any_size() {
+        let core = any_core();
+        let (x, y): (u32, u32) = (kani::any(), kani::any());
+        kani::assume(x < core.size() && y < core.size());
+        assert_eq!(core.fold(i64::from(x)), x);
+        let s = core.fold(i64::from(x) + i64::from(y));
+        assert!(s < core.size());
+        let sum = u64::from(x) + u64::from(y);
+        let size = u64::from(core.size());
+        let expected = if sum >= size { sum - size } else { sum };
+        assert_eq!(u64::from(s), expected);
+    }
+
+    /// The signed reading splits the core cleanly: every folded value is
+    /// exactly one of zero, positive, or negative, and -1 reads as negative.
+    #[kani::proof]
+    fn signed_reading_is_a_partition() {
+        let core = any_core();
+        let v: u32 = kani::any();
+        kani::assume(v < core.size());
+        let classes =
+            u8::from(v == 0) + u8::from(core.is_positive(v)) + u8::from(core.is_negative(v));
+        assert_eq!(classes, 1);
+        assert!(core.is_negative(core.negative_one()));
+    }
+}

@@ -94,6 +94,11 @@ pub fn exec_jmn(instr: Instruction, ops: Operands) -> StepResult {
 
 /// Executes `DJN`: decrements the examined fields in core, then jumps when any
 /// of them is non-zero.
+///
+/// The test reads the decremented B-instruction register (the snapshot taken
+/// during operand resolution), not the core cell, as the ICWS'94 draft's
+/// `emi94.c` and pMARS both do. The two differ when the B-operand's own
+/// post-increment rewrote the cell after the snapshot, as in `DJN.B 30, >0`.
 pub fn exec_djn(
     core: &mut Core,
     instr: Instruction,
@@ -112,11 +117,11 @@ pub fn exec_djn(
     let mut non_zero = false;
     if touch_a {
         dst.a = core.fold(i64::from(dst.a) - 1);
-        non_zero |= dst.a != 0;
+        non_zero |= core.fold(i64::from(ops.irb.a) - 1) != 0;
     }
     if touch_b {
         dst.b = core.fold(i64::from(dst.b) - 1);
-        non_zero |= dst.b != 0;
+        non_zero |= core.fold(i64::from(ops.irb.b) - 1) != 0;
     }
     core.set(ops.b_ptr, dst, owner);
     if non_zero {
@@ -266,6 +271,21 @@ mod tests {
         let (core, r) = run(i(Opcode::Djn, Modifier::B, 30, 1), &[(1, dat(0, 1))]);
         assert_eq!(core.get(1).b, 0);
         assert_eq!(r, StepResult::Continue);
+    }
+
+    #[test]
+    fn djn_tests_the_snapshot_not_the_post_incremented_cell() {
+        // `DJN.B $30, >0`: the B-operand points at the DJN itself (B = 0),
+        // snapshots B = 0, then post-increments the cell to 1. The decrement
+        // brings the cell back to 0, but the test reads the snapshot: 0 - 1
+        // is -1, non-zero, so the jump is taken.
+        let instr = Instruction {
+            b_mode: AddrMode::PostincB,
+            ..i(Opcode::Djn, Modifier::B, 30, 0)
+        };
+        let (core, r) = run(instr, &[]);
+        assert_eq!(core.get(0).b, 0);
+        assert_eq!(r, StepResult::Jump(30));
     }
 
     #[test]

@@ -53,8 +53,10 @@ pub fn exec_mov(
 
 /// Executes `ADD`, `SUB`, `MUL`, `DIV`, or `MOD`.
 ///
-/// Division or modulo by zero kills the process. Fields written before the
-/// zero divisor is encountered keep their new values, as ICWS'94 requires.
+/// Division or modulo by zero kills the process. Under `.F`, `.X`, and `.I`
+/// the other field is still computed and written when its own divisor is
+/// non-zero, whichever order the fields come in, as the ICWS'94 draft's
+/// `emi94.c` and pMARS both do.
 pub fn exec_binop(
     core: &mut Core,
     instr: Instruction,
@@ -73,7 +75,7 @@ pub fn exec_binop(
             BinOp::Mul => core.fold(d * s),
             BinOp::Div | BinOp::Mod if s == 0 => {
                 died = true;
-                break;
+                continue;
             }
             BinOp::Div => core.fold(d / s),
             BinOp::Mod => core.fold(d % s),
@@ -230,6 +232,21 @@ mod tests {
             core.get(2).a,
             5,
             "fields before the zero divisor are still written"
+        );
+    }
+
+    #[test]
+    fn div_f_still_writes_the_b_field_when_only_the_a_divisor_is_zero() {
+        let (core, r) = run(
+            i(Opcode::Div, Modifier::F, 1, 2),
+            &[(1, dat(0, 2)), (2, dat(10, 10))],
+        );
+        assert_eq!(r, StepResult::Die);
+        assert_eq!(core.get(2).a, 10, "zero divisor leaves its field alone");
+        assert_eq!(
+            core.get(2).b,
+            5,
+            "fields after the zero divisor are still written"
         );
     }
 }

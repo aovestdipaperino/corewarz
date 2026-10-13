@@ -34,6 +34,8 @@ pub mod instruction;
 pub mod mars;
 pub mod observer;
 pub mod placement;
+#[cfg(kani)]
+mod proofs;
 pub mod queue;
 pub mod warrior;
 

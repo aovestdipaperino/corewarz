@@ -7,6 +7,9 @@ license.workspace = true
 repository.workspace = true
 description = "MARS virtual machine for CoreWarz, an extended Core War"
 
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+
 [dependencies]
 
 [dev-dependencies]

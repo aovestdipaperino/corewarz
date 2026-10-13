@@ -21,7 +21,7 @@ pub struct Operands {
     pub irb: Instruction,
 }
 
-/// A post-increment deferred until both operands have been resolved.
+/// A post-increment deferred until its operand's snapshot has been taken.
 #[derive(Clone, Copy)]
 struct Deferred {
     addr: u32,
@@ -96,17 +96,18 @@ fn apply(core: &mut Core, d: Option<Deferred>, owner: WarriorId) {
 
 /// Evaluates both operands of `instr` executing at `pc`.
 ///
-/// Applies pre-decrement side effects immediately and post-increment side
-/// effects after both operands have been evaluated, in A-then-B order, as
-/// ICWS'94 requires.
+/// Evaluates the A-operand completely (pre-decrement, snapshot,
+/// post-increment) before touching the B-operand, as the ICWS'94 draft's
+/// `emi94.c` and pMARS both do. The B-operand therefore sees the A-operand's
+/// post-increment.
 pub fn resolve(core: &mut Core, pc: u32, instr: Instruction, owner: WarriorId) -> Operands {
     let mut da = None;
     let mut db = None;
     let a_ptr = eval_one(core, pc, instr.a_mode, instr.a, owner, &mut da);
     let ira = core.get(a_ptr);
+    apply(core, da, owner);
     let b_ptr = eval_one(core, pc, instr.b_mode, instr.b, owner, &mut db);
     let irb = core.get(b_ptr);
-    apply(core, da, owner);
     apply(core, db, owner);
     Operands {
         a_ptr,
@@ -220,14 +221,16 @@ mod tests {
         // PostincB uses the B field as offset: ptr + cell.b = 110 + 50 = 160
         let i = instr(AddrMode::PostincB, 10, AddrMode::PostincB, 10);
         let ops = resolve(&mut core, 100, i, w);
-        // Both should use the pre-increment B value as offset (50)
+        // The A-operand is evaluated completely, post-increment included,
+        // before the B-operand: A uses 50, B already sees 51 (ICWS'94 emi94.c
+        // and pMARS agree).
         assert_eq!(
             ops.a_ptr, 160,
-            "A-operand should use pre-increment B value as offset (110 + 50 = 160)"
+            "A-operand should use the pre-increment B value as offset (110 + 50 = 160)"
         );
         assert_eq!(
-            ops.b_ptr, 160,
-            "B-operand should use pre-increment B value as offset (110 + 50 = 160)"
+            ops.b_ptr, 161,
+            "B-operand should see the A-operand's post-increment (110 + 51 = 161)"
         );
         // Both deferred increments should apply: 50 + 1 + 1 = 52
         assert_eq!(
@@ -248,14 +251,16 @@ mod tests {
         // PostincA uses the A field as offset: ptr + cell.a = 110 + 50 = 160
         let i = instr(AddrMode::PostincA, 10, AddrMode::PostincA, 10);
         let ops = resolve(&mut core, 100, i, w);
-        // Both should use the pre-increment A value as offset (50)
+        // The A-operand is evaluated completely, post-increment included,
+        // before the B-operand: A uses 50, B already sees 51 (ICWS'94 emi94.c
+        // and pMARS agree).
         assert_eq!(
             ops.a_ptr, 160,
-            "A-operand should use pre-increment A value as offset (110 + 50 = 160)"
+            "A-operand should use the pre-increment A value as offset (110 + 50 = 160)"
         );
         assert_eq!(
-            ops.b_ptr, 160,
-            "B-operand should use pre-increment A value as offset (110 + 50 = 160)"
+            ops.b_ptr, 161,
+            "B-operand should see the A-operand's post-increment (110 + 51 = 161)"
         );
         // Both deferred increments should apply: 50 + 1 + 1 = 52
         assert_eq!(
