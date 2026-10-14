@@ -63,6 +63,11 @@ pub enum AdmissionError {
         length: u32,
         limit: u32,
     },
+    /// `Config::core_size` is below [`Config::MIN_CORE_SIZE`].
+    CoreTooSmall {
+        /// The requested core size.
+        size: u32,
+    },
 }
 
 impl std::fmt::Display for AdmissionError {
@@ -88,6 +93,11 @@ impl std::fmt::Display for AdmissionError {
                     "warrior {warrior} is {length} instructions long, the limit is {limit}"
                 )
             }
+            Self::CoreTooSmall { size } => write!(
+                f,
+                "a core of {size} cells is too small, the minimum is {}",
+                Config::MIN_CORE_SIZE
+            ),
         }
     }
 }
@@ -123,6 +133,11 @@ impl Mars {
         positions: &[u32],
     ) -> Result<Self, AdmissionError> {
         assert_eq!(warriors.len(), positions.len(), "one position per warrior");
+        if config.core_size < Config::MIN_CORE_SIZE {
+            return Err(AdmissionError::CoreTooSmall {
+                size: config.core_size,
+            });
+        }
         Self::check_positions(&config, positions).map_err(AdmissionError::Separation)?;
         for (index, warrior) in warriors.iter().enumerate() {
             let length = u32::try_from(warrior.code.len()).unwrap_or(u32::MAX);
@@ -360,6 +375,18 @@ mod tests {
     /// A warrior that immediately executes DAT and dies.
     fn suicide() -> Warrior {
         warrior("suicide", vec![i(Opcode::Dat, 0, 0)])
+    }
+
+    #[test]
+    fn a_core_below_the_minimum_is_rejected() {
+        for size in [0, 1, Config::MIN_CORE_SIZE - 1] {
+            let config = Config {
+                core_size: size,
+                ..Config::default()
+            };
+            let result = Mars::try_new(config, vec![imp()], &[0]);
+            assert_eq!(result.err(), Some(AdmissionError::CoreTooSmall { size }));
+        }
     }
 
     #[test]

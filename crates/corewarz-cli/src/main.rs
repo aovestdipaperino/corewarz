@@ -32,7 +32,7 @@ struct RunArgs {
     warriors: Vec<PathBuf>,
 
     /// Number of cells in the core.
-    #[arg(long, default_value_t = 8000)]
+    #[arg(long, default_value_t = 8000, value_parser = clap::value_parser!(u32).range(4..))]
     core_size: u32,
 
     /// Cycles before an undecided battle is a tie.

@@ -19,10 +19,14 @@ pub struct Core {
 impl Core {
     /// Creates a core of `config.core_size` cells, every cell `DAT.F $0, $0`
     /// and unowned.
+    ///
+    /// # Panics
+    /// Panics if `config.core_size` is below [`Config::MIN_CORE_SIZE`].
+    /// [`crate::mars::Mars::try_new`] rejects such a config with an error.
     #[must_use]
     pub fn new(config: &Config) -> Self {
-        debug_assert!(
-            config.core_size >= 4,
+        assert!(
+            config.core_size >= Config::MIN_CORE_SIZE,
             "below a core size of 4, folded signed reading degenerates: \
              negative_one() stops satisfying is_negative()"
         );
@@ -47,6 +51,14 @@ impl Core {
     pub fn fold(&self, value: i64) -> u32 {
         let m = i64::from(self.size);
         (((value % m) + m) % m) as u32
+    }
+
+    /// Folds `a * b` without overflow for any two `u32` operands.
+    #[must_use]
+    pub fn fold_product(&self, a: u32, b: u32) -> u32 {
+        let product = u64::from(a) * u64::from(b);
+        // The remainder is below `size`, which fits in a u32.
+        (product % u64::from(self.size)) as u32
     }
 
     /// Reads the instruction at `addr`.
@@ -117,6 +129,26 @@ mod tests {
             core_size: 8000,
             ..Config::default()
         })
+    }
+
+    #[test]
+    fn fold_product_does_not_overflow_for_any_u32_operands() {
+        let c = core();
+        assert_eq!(
+            c.fold_product(u32::MAX, u32::MAX),
+            ((u64::from(u32::MAX).pow(2)) % 8000) as u32
+        );
+        assert_eq!(c.fold_product(7999, 7999), 7999 * 7999 % 8000);
+        assert_eq!(c.fold_product(0, u32::MAX), 0);
+    }
+
+    #[test]
+    #[should_panic(expected = "below a core size")]
+    fn new_rejects_a_core_below_the_minimum() {
+        let _ = Core::new(&Config {
+            core_size: 0,
+            ..Config::default()
+        });
     }
 
     #[test]

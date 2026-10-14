@@ -27,6 +27,12 @@ pub struct Config {
     pub dialect: Dialect,
 }
 
+impl Config {
+    /// The smallest core a battle accepts. Below 4 cells, folded signed
+    /// reading degenerates and a size of 0 cannot fold at all.
+    pub const MIN_CORE_SIZE: u32 = 4;
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {

@@ -72,7 +72,9 @@ pub fn exec_binop(
         let value = match op {
             BinOp::Add => core.fold(d + s),
             BinOp::Sub => core.fold(d - s),
-            BinOp::Mul => core.fold(d * s),
+            // Both fields are below the core size, so the product fits in a
+            // u64 even where it would overflow an i64.
+            BinOp::Mul => core.fold_product(dst_f.get(&ops.irb), src_f.get(&ops.ira)),
             BinOp::Div | BinOp::Mod if s == 0 => {
                 died = true;
                 continue;
