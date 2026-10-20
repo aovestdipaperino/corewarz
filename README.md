@@ -1,5 +1,9 @@
 # CoreWarz
 
+<p align="center">
+  <img src="docs/images/logo.png" alt="CoreWarz logo" width="600">
+</p>
+
 Core War is a programming game from 1984: two or more assembly-language
 programs ("warriors"), written in a small language called Redcode, run
 concurrently inside a shared, circular memory ("the core") and try to kill
