@@ -1,5 +1,7 @@
 # CoreWarz
 
+[![GitHub stars](https://img.shields.io/github/stars/aovestdipaperino/corewarz?logo=github&color=brightgreen)](https://github.com/aovestdipaperino/corewarz/stargazers)
+
 <p align="center">
   <img src="docs/images/logo.png" alt="CoreWarz logo" width="600">
 </p>
